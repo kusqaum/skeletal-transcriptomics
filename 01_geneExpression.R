@@ -40,32 +40,32 @@ for (d in abundance_data){
   human <- grep(pattern = "ENSG", row.names(d))
   #search for those that have mouse IDs
   mouse <- grep(pattern = "ENSMUSG", row.names(d))
-  rat <- grep(pattern = "ENSRNOG", row.names(d))
-  pig <- grep(pattern = "ENSSSC", row.names(d))
-  cow <- grep(pattern = "ENSBTA", row.names(d))
-  horse <- grep(pattern = "ENSECAG", row.names(d))
-  zebrafish <- grep(pattern = "ENSDARG", row.names(d))
+  #rat <- grep(pattern = "ENSRNOG", row.names(d))
+  #pig <- grep(pattern = "ENSSSC", row.names(d))
+  #cow <- grep(pattern = "ENSBTA", row.names(d))
+  #horse <- grep(pattern = "ENSECAG", row.names(d))
+  #zebrafish <- grep(pattern = "ENSDARG", row.names(d))
   if (any(human)){
     allHuman <- append(allHuman, list(d))
   }
   else if (any(mouse)){
     allMouse <- append(allMouse, list(d))
   }
-  else if (any(rat)){
-    allRat <- append(allRat, list(d))
-  }
-  else if(any(pig)){
-    allPig <- append(allPig, list(d))
-  }
-  else if (any(cow)){
-    allCow <- append(allCow, list(d))
-  }
-  else if (any(horse)){
-    allHorse <- append(allHorse, list(d))
-  }
-  else if (any(zebrafish)){
-    allZebrafish <- append(allZebrafish, list(d))
-  }
+  #else if (any(rat)){
+   # allRat <- append(allRat, list(d))
+  #}
+  #else if(any(pig)){
+   # allPig <- append(allPig, list(d))
+  #}
+  #else if (any(cow)){
+   # allCow <- append(allCow, list(d))
+  #}
+  #else if (any(horse)){
+   # allHorse <- append(allHorse, list(d))
+  #}
+  #else if (any(zebrafish)){
+   # allZebrafish <- append(allZebrafish, list(d))
+  #}
 }
 
 
@@ -81,25 +81,25 @@ allMouse_df <- lapply(allMouse, function(r){
 })
 
 # the same for the other animals data
-allRat_df <- lapply(allRat, function(s){
-  dataset <- data.frame(list(s))
-})
+#allRat_df <- lapply(allRat, function(s){
+#  dataset <- data.frame(list(s))
+#})
 
-allPig_df <- lapply(allPig, function(t){
-  dataset <- data.frame(list(t))
-})
+#allPig_df <- lapply(allPig, function(t){
+ # dataset <- data.frame(list(t))
+#})
 
-allCow_df <- lapply(allCow, function(u){
-  dataset <- data.frame(list(u))
-})
+#allCow_df <- lapply(allCow, function(u){
+ # dataset <- data.frame(list(u))
+#})
 
-allHorse_df <- lapply(allHorse, function(v){
-  dataset <- data.frame(list(v))
-})
+#allHorse_df <- lapply(allHorse, function(v){
+ # dataset <- data.frame(list(v))
+#})
 
-allZebrafish_df <- lapply(allZebrafish, function(w){
-  dataset <- data.frame(list(w))
-})
+#allZebrafish_df <- lapply(allZebrafish, function(w){
+ # dataset <- data.frame(list(w))
+#})
 
 
 
@@ -110,27 +110,27 @@ for (m in 1:length(allMouse_df)){
 
 
 # addd extra column for rats as well as the other species
-for (n in 1:length(allRat_df)) {
-  allRat_df[[n]]$ID <- rownames(allRat_df[[n]])
-}
+#for (n in 1:length(allRat_df)) {
+#  allRat_df[[n]]$ID <- rownames(allRat_df[[n]])
+#}
 
-for (p in 1:length(allPig_df)) {
-  allPig_df[[p]]$ID <- rownames(allPig_df[[p]])
-}
+#for (p in 1:length(allPig_df)) {
+#  allPig_df[[p]]$ID <- rownames(allPig_df[[p]])
+#}
   
-for (c in 1:length(allCow_df)) {
-  allCow_df[[c]]$ID <- rownames(allCow_df[[c]])
-}  
+#for (c in 1:length(allCow_df)) {
+#  allCow_df[[c]]$ID <- rownames(allCow_df[[c]])
+#}  
 
-for (h in 1:length(allHorse_df)) {
-  allHorse_df[[h]]$ID <- rownames(allHorse_df[[h]])
+#for (h in 1:length(allHorse_df)) {
+#  allHorse_df[[h]]$ID <- rownames(allHorse_df[[h]])
   
-}
+#}
 
-for (z in 1:length(allZebrafish_df)) {
-  allZebrafish_df[[z]]$ID <- rownames(allZebrafish_df[[z]])
+#for (z in 1:length(allZebrafish_df)) {
+#  allZebrafish_df[[z]]$ID <- rownames(allZebrafish_df[[z]])
   
-}
+#}
 
 #now I need to map the animal ENSEMBL IDs to human
 mouseDf <- join_all(allMouse_df, by = "ID", type = "full")
@@ -140,12 +140,12 @@ mouseDf <- join_all(allMouse_df, by = "ID", type = "full")
 #do horse and zebrafish also:
 
 #going to leave this for now, just incase we want the column names instead of rownames later?
-rownames(mouseDf) <- mouseDf$ID; mouseDf$ID <- NULL
+#rownames(mouseDf) <- mouseDf$ID; mouseDf$ID <- NULL
 
 mouse_ensemble <- data.frame(mouseDf$ID)
-rat_ensembl <- data.frame(ratDf$ID)
+#rat_ensembl <- data.frame(ratDf$ID)
 write.table(mouse_ensemble, "raw/mouse_ensembleIDs.txt", sep = "\t", quote = F, row.names = F)
-write.table(rat_ensembl, "raw/rat_ensembleIDs.txt", sep = "\t", quote = F, row.names = F)
+#write.table(rat_ensembl, "raw/rat_ensembleIDs.txt", sep = "\t", quote = F, row.names = F)
 
 mouse_homology <- read.table("processed/Genes_Mouse_to_human.txt", header = T)
 
@@ -168,9 +168,97 @@ human_coding <- read.table("processed/human_coding_genes.txt", header = T)
 humanDf$ensembl_gene_id <- rownames(humanDf)
 # then merge with large humanDf so just retaining IDs common to both. remove the cols made for 
 #merging
-humanPC <- merge(human_coding, humanDf, by = "ensembl_gene_id"); humanDf$ensembl_gene_id <- NULL; humanPC$ensembl_gene_id <- NULL
+humanPC <- merge(human_coding, humanDf, by = "ensembl_gene_id"); humanDf$ensembl_gene_id <- NULL#; humanPC$ensembl_gene_id <- NULL
+
+write.table(humanPC, "processed/HumanCoding_rnaSeq.txt", row.names = F, sep = "\t", quote = F) # remember that one of the
+#columns is called ensembl_gene_id for later
 
 #so just keeping the protein coding genes from the human dataframe.leaves me with a total of 
 #20,430 protein coding genes
-humanPC
+
+##### Integrating gene expression with mouse phenotype data
+impcGenes <- read.table("processed/IMPC_phenotypeAssociations.txt", header = T)
+
+#impcGenes_ordered <- impcGenes[order(impcGenes$marker_symbol),]
+
+
+#there are some duplicated genes that are associated and also not associated
+# with a phenotype. I want to keep any gene that has been associated
+#with a skeletal phenotype in any case:
+impcGenes2 <- impcGenes[order(impcGenes[,"marker_symbol"], -impcGenes[,"significant"]),]
+impcGenes2 <- impcGenes2[!duplicated(impcGenes2$marker_symbol),]
+
+
+#read in mouse symbol to ensembl id data file
+hgncAllianceHomology <- read.table("processed/hgncAllianceHomology.txt", header = T)
+
+matchs_allHom <- match(impcGenes2$marker_symbol, hgncAllianceHomology[,1])
+ensembl_id <- hgncAllianceHomology[matchs_allHom, 2]
+impcGenes2$ID <- ensembl_id
+
+sum(is.na(impcGenes2$ID))
+na <- impcGenes2 %>% filter(is.na(ID)) # there are 18 na values
+null <- impcGenes2 %>% filter(ID == "null") #and 5 null
+
+#fill in the ones that we can...
+impcGenes2$ID[is.na(impcGenes2$ID) & impcGenes2$marker_symbol == "4932438H23Rik"] <- "ENSMUSG00000039851"
+impcGenes2$ID[is.na(impcGenes2$ID) & impcGenes2$marker_symbol == "Ankrd36"] <- "ENSMUSG00000020481"
+impcGenes2$ID[is.na(impcGenes2$ID) & impcGenes2$marker_symbol == "B430306N03Rik"] <- "ENSMUSG00000043740"
+impcGenes2$ID[is.na(impcGenes2$ID) & impcGenes2$marker_symbol == "Gm11639"] <- "ENSMUSG00000040838"
+impcGenes2$ID[is.na(impcGenes2$ID) & impcGenes2$marker_symbol == "Gm2694"] <- "ENSMUSG00000097248"
+#the rest NAs are cpgs
+impcGenes2 <- impcGenes2 %>% filter(!is.na(ID)) %>%
+  filter(ID != "null")
+
+
+#so now I need to transfer all IMPC genes
+impc_mouse_ensembl <- data.frame(impcGenes2$ID)
+write.table(impc_mouse_ensembl, "processed/list_impc_ids.txt", row.names = F, sep = "\t", quote = F)
+#so that I can convert them to human orthologs using biomart
+#and then i need to read them in....
+
+
+#need to now map the mouse ensembl IDs to human IDs...
+#in_homology <- match(impcGenes2$ID, mouse_homology[,1])
+# so now I need to gather the non mapped impc genes:
+
+impcHomology <- read.table("processed/allIMPC_homology.txt", header = T)
+#mouse_homology2 <- mouse_homology
+#colnames(mouse_homology2)[1] <- "Mouse_ensembl"
+#colnames(mouse_homology2)[2] <- "Human_ensembl"
+#mouse_homology_forIMPC <- rbind(mouse_homology2, impcHomology)
+
+matchingIMPC <- match(impcGenes2$ID, impcHomology[,1])
+ensemblHuman <- impcHomology[matchingIMPC, 2]
+impcGenes2$ensembl_gene_id <- ensemblHuman
+sum(is.na(impcGenes2$ensembl_gene_id))
+#i have checked some of these and I don't think there is a mapping for them. So I will have to leave them out :
+na_2 <- impcGenes2 %>% filter(is.na(ensembl_gene_id))
+
+
+final_impcGenes <- impcGenes2 %>% select(ensembl_gene_id, significant) %>% filter(!is.na(ensembl_gene_id))
+sum(final_impcGenes$significant == "TRUE")
+sum(final_impcGenes$significant == "FALSE")
+
+
+#then can merge this df with humanPC by "ensemblgene_id"
+dataWithLabels <- merge(humanPC, final_impcGenes, by = "ensembl_gene_id")
+#now change ensembl IDs to rownames:
+rownames(dataWithLabels)<- dataWithLabels$ensembl_gene_id; dataWithLabels$ensembl_gene_id <- NULL
+
+#mapped <- mouse_homology[in_homology, 2]
+#impcGenes2$ID_humn <- mapped
+#not_mapped <- impcGenes2 %>% filter(is.na(ID_humn))
+
+#not_mapped_ids <- data.frame(not_mapped$ID)
+#write.table(not_mapped_ids, "processed/not_mapped_IMPCgenes.txt", quote = F, row.names = F, sep = "\t")
+
+#impcGenes_mapped <- merge(impcGenes2, mouse_homology, by = "ID")
+#colnames(impcGenes_mapped)[5] <- "ensembl_gene_id"
+
+
+
+#onlyHuman <- read.table("processed/HumanCoding_rnaSeq.txt", header = T)
+#now i want to merge with mouse data...
+
 
