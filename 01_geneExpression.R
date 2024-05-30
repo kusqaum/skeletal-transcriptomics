@@ -245,7 +245,7 @@ sum(final_impcGenes$significant == "FALSE")
 dataWithLabels <- merge(humanPC, final_impcGenes, by = "ensembl_gene_id")
 #now change ensembl IDs to rownames:
 rownames(dataWithLabels)<- dataWithLabels$ensembl_gene_id; dataWithLabels$ensembl_gene_id <- NULL
-
+write.table(dataWithLabels, "processed/geneExpressionDataWithLabels.txt", row.names = F, sep = "\t", quote = F)
 #mapped <- mouse_homology[in_homology, 2]
 #impcGenes2$ID_humn <- mapped
 #not_mapped <- impcGenes2 %>% filter(is.na(ID_humn))
