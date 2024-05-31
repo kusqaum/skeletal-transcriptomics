@@ -1,3 +1,7 @@
+library(tidyverse)
+library(plyr)
+
+
 testfile <- readRDS("raw/rnaSeq/GSE99662/GSE99662_txi.RDS")
 testfile2 <- readRDS("raw/rnaSeq/GSE162691/GSE162691_txi.RDS")
 
@@ -188,7 +192,6 @@ impcGenes <- read.table("processed/IMPC_phenotypeAssociations.txt", header = T)
 impcGenes2 <- impcGenes[order(impcGenes[,"marker_symbol"], -impcGenes[,"significant"]),]
 impcGenes2 <- impcGenes2[!duplicated(impcGenes2$marker_symbol),]
 
-
 #read in mouse symbol to ensembl id data file
 hgncAllianceHomology <- read.table("processed/hgncAllianceHomology.txt", header = T)
 
@@ -223,6 +226,7 @@ write.table(impc_mouse_ensembl, "processed/list_impc_ids.txt", row.names = F, se
 # so now I need to gather the non mapped impc genes:
 
 impcHomology <- read.table("processed/allIMPC_homology.txt", header = T)
+#only managed to get mappings for 8015 genes out of 8474. 459 genes lost :/
 #mouse_homology2 <- mouse_homology
 #colnames(mouse_homology2)[1] <- "Mouse_ensembl"
 #colnames(mouse_homology2)[2] <- "Human_ensembl"
@@ -245,7 +249,7 @@ sum(final_impcGenes$significant == "FALSE")
 dataWithLabels <- merge(humanPC, final_impcGenes, by = "ensembl_gene_id")
 #now change ensembl IDs to rownames:
 rownames(dataWithLabels)<- dataWithLabels$ensembl_gene_id; dataWithLabels$ensembl_gene_id <- NULL
-write.table(dataWithLabels, "processed/geneExpressionDataWithLabels.txt", row.names = F, sep = "\t", quote = F)
+write.table(dataWithLabels, "processed/geneExpressionDataWithLabels.txt", row.names = T, sep = "\t", quote = F)
 #mapped <- mouse_homology[in_homology, 2]
 #impcGenes2$ID_humn <- mapped
 #not_mapped <- impcGenes2 %>% filter(is.na(ID_humn))
