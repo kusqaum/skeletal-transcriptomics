@@ -30,9 +30,6 @@ sum(smallGeneExpress3$significant == "FALSE")
 #now we have 944 and 4426 positive and negative genes
 
 
-#t_subset <- smallGeneExpress[,50:51]
-#t.test(culture_fibroblast ~ significant, data = smallGeneExpress)
-
 
 smallGeneExpressMatrix <- as.matrix(smallGeneExpress)
 smallGeneExpressMatrix <- normalize.quantiles(smallGeneExpressMatrix[,1:50])
@@ -62,16 +59,15 @@ noRanks <- seq(2,10,2)
 #and the number of ranks
 noofruns <- 2
 #set seed as well
-res.multiRank <- nmf(matrix[,1:50], rank = noRanks, nrun=noofruns, seed = 123456)
+res.multiRank <- nmf(abs(smallGeneExpress3[,1:50]), rank = noRanks, nrun=noofruns, seed = 123456)
 #can choose to plo just cophenetic + silhouette
 plot(res.multiRank, 'cophenetic', 'silhouette')
-#res.multiRank2 <- nmf(expressionDataMat[,1:1128], seq(2,200,5), seed = 123456)
 
 #look at performance measures of the factorisation
 summary(res.multiRank)
 consensusmap(res.multiRank, labCol = NA, labRow = NA)
 
-res.multi.method <- nmf(smallGeneExpress[,1:50], 2, seed =123456, list("brunet","lee", "ns"), .options= "t")
+#res.multi.method <- nmf(smallGeneExpress[,1:50], 2, seed =123456, list("brunet","lee", "ns"), .options= "t")
 #compare(res.multi.method)
 
 #maxbrunCoph <- max(res.multi.method$brunet$measures$cophenetic)
@@ -116,27 +112,34 @@ ggplot(as.data.frame(h_matrix))
 
 
 #perform PCA. each of our data points needs to be a gene so not going to transpose
-pca_res <- prcomp((smallGeneExpress[,1:50]), scale =T)
+pca_res <- prcomp((smallGeneExpress3[,1:50]), scale =T)
 #look at variance
 summary(pca_res)$importance
-var_explained <- summary(pca_res)$importance[2,]*100
+#var_explained <- summary(pca_res)$importance[2,]*100
 #get 1&2nd PCs to plot
-pca_res$x[1:5,]
-ggplot(as.data.frame(pca_res$x[,1:2])) + 
-  aes(x=PC1, y=PC2) + 
-  geom_point(aes(col=smallGeneExpress[,51])) +
-  xlab(paste("PC1", round(var_explained[1],1), "%")) +
-  ylab(paste("PC2", round(var_explained[2],1), "%"))
-
 pcs <- data.frame(pca_res$x)
-pcs$significant <- smallGeneExpress$significant
+pcs$significant <- smallGeneExpress3$significant
 
-for (dim in colnames(pcs)) {
-  print(pcs$[dim])
-  #print(dim)
-  #t.test(pcs$dim ~ pcs$significant)
+
+#t_subset <- smallGeneExpress[,50:51]
+#t.test(culture_fibroblast ~ significant, data = smallGeneExpress)
+
+tmp <- t.test(PC1 ~ significant, data = pcs)
+tmp$p.value
+tmp$statistic
+#empty vector to store pvalue results:
+t_testPvaluesPC <- numeric()
+#so I am going to loop through all the principal components: minus 1 b/c don't want to include last column
+for (pc in 1:(ncol(pcs)-1)) {
+  #print(pc)
+  #extract the result of t-test for each
+  tresult[[pc]] <- t.test(pcs[[pc]] ~ significant, data = pcs)
+  #obtain the p-value for each
+  pVal[[pc]] <- tresult[[pc]]$p.value
+  #then add it to empty numeric vector created above
+  t_testPvaluesPC <- c(t_testPvaluesPC, pVal[[pc]])
 }
-
+head(data.frame(tres))
 
 
 
