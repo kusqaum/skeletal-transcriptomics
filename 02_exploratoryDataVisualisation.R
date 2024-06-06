@@ -103,15 +103,22 @@ basis_matrices <- lapply(Wmatrices, function(w){
 nmfPvals <- numeric()
 minPvals <- numeric()
 for (mat in basis_matrices) {
+  #pValue <- rep
   #View(mat)
   for (dim in 1:ncol(mat)) {
     resTtest <- t.test(smallGeneExpress3$significant, mat[, dim])$p.value
+    #mat$pValue <- resTtest
     nmfPvals <- c(nmfPvals, resTtest)
+    #minPvals <- which.min(nmfPvals)
+    #basis_matrices <- append(basis_matrices[[mat]], resTtest[[mat]])
     
   }
   #minPvals <- c(minPvals)
   
 }
+
+
+
 
 
 ####PCA####
@@ -120,7 +127,6 @@ for (mat in basis_matrices) {
 pca_res <- prcomp((smallGeneExpress3[,1:50]), scale =T)
 #look at variance
 #summary(pca_res)$importance
-#var_explained <- summary(pca_res)$importance[2,]*100
 #get 1&2nd PCs to plot
 pcs <- data.frame(pca_res$x)
 #pcs$significant <- smallGeneExpress3$significant
@@ -165,5 +171,27 @@ ggplot(pValsdf, aes(x=dim, y=-log10(pValsPCA), col = Algorithm)) +
   xlab("k dimensions") + ylab("-log10 P-Value")
 
 #also create a scree plot for pca
+var_explained <- (pca_res$sdev)^2/sum((pca_res$sdev)^2)
+varExpl_df <- data.frame(PC = 1:length(var_explained), 
+                                var_expl = var_explained,
+                         cumulativeVariance = cumsum(var_expl))
+
+ggplot(varExpl_df[1:8,], aes(x = PC, y = 100*cumulativeVariance)) +
+  geom_bar(stat = 'identity', col = 'black', fill="lightgrey") + 
+  #geom_point()+
+  #geom_line()+
+  theme_classic(base_size = 20) +
+  geom_hline(yintercept = 95, col = "red", lty = "dashed")+
+  scale_x_continuous(breaks = seq(1, nrow(varExpl_df[1:8,]), 1)) +
+  xlab("PC index") + ylab("% explained variance by principal components")
+  
+  #xlim(0, 10)
+
+####rough of machine learning:####
+#library(tidymodels)
 
 
+compressed_PCA <- pcs
+compressed_PCA$significant <- smallGeneExpress3$significant
+str(compressed_PCA)
+compressed_PCA$significant <- as.factor(compressed_PCA$significant)
