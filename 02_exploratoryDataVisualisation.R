@@ -81,35 +81,40 @@ plot(res.multiRank)
 
 
 res.multiRank$measures
-# choosing the best rank
-# so when thte cophenetic correlation coefficient begins to fall
-max_cophenetic <- max(res.multiRank$measures$cophenetic)
-# loop through the position of each rank.
-#no. of ranks we used:
-length(res.multiRank$measures$rank)
-for (i in 1:length(res.multiRank$measures$rank)){
-  if (res.multiRank$measures$cophenetic[i]== max_cophenetic){
-    idxCophenMax <- i #idxCophen is the position of the rank.
-  }
+
+#idxCophenMax
+#res.multiRank$measures$cophenetic
+#basis_matrix <- list()
+nmfFitCl <- list()
+Wmatrices <- list()
+
+for (rank in 1:length(res.multiRank$measures$rank)){
+  #print(rank)
+  nmfFitCl[[rank]] <- res.multiRank$fit[[rank]]
+  Wmatrices[[rank]] <- nmfFitCl[[rank]]@fit@W
+  #print(nmfFitCl[[rank]])
+  #basis_matrix <- append(basis_matrix,nmfFitCl[[rank]]@fit@W)
 }
-idxCophenMax
-res.multiRank$measures$cophenetic
-#let's look at the silhouette:
-res.multiRank$measures$silhouette.consensus
+basis_matrices <- lapply(Wmatrices, function(w){
+  data.frame(list(w))
+})
 
-nmfFitClass  <- res.multiRank$fit[[idxCophenMax]]
-nmfFitClass2 <- res.multiRank$fit[[1]]
-head(nmfFitClass2@fit@W)
-#get the w and h matrices for the rank with highest cophenetic
-h_matrix <- nmfFitClass@fit@H
-w_matrix <- nmfFitClass@fit@W #this one has metagenes as the cols. and gene as rows
-###ggplot(as.data.frame(w_matrix), aes(x=V1, y=V2, col=smallGeneExpress$significant))+geom_point()
-consensusmap(res.multiRank$fit[[idxCophenMax]])
-consensusmap(res.multiRank)
-res <- nmf(smallGeneExpress[,1:50], 2)
-nmf.w <- basis(res)
-ggplot(as.data.frame(h_matrix))
 
+nmfPvals <- numeric()
+minPvals <- numeric()
+for (mat in basis_matrices) {
+  #View(mat)
+  for (dim in 1:ncol(mat)) {
+    resTtest <- t.test(smallGeneExpress3$significant, mat[, dim])$p.value
+    nmfPvals <- c(nmfPvals, resTtest)
+    
+  }
+  #minPvals <- c(minPvals)
+  
+}
+
+
+####PCA####
 
 #perform PCA. each of our data points needs to be a gene so not going to transpose
 pca_res <- prcomp((smallGeneExpress3[,1:50]), scale =T)
@@ -146,15 +151,19 @@ for (PC in 1:ncol(pcs)) {
   resultfortest <- t.test(smallGeneExpress3$significant,  pcs[,PC])$p.value
   pValsPCA <- c(pValsPCA, resultfortest)
   #resultfortest_pval <- resultfortest$
+  smallestPval <- which.min(pValsPCA)
 }
-pValsPCA <- as.data.frame(pValsPCA); pValsPCA$dimension<- colnames(pcs)
-pValsPCA$dim <- c(1:ncol(pcs))
-pValsPCA$algorithm <- c('PCA')
+pValsdf <- as.data.frame(pValsPCA); pValsdf$dimension<- colnames(pcs)
+pValsdf$dim <- c(1:ncol(pcs))
+pValsdf$Algorithm <- c('PCA')
 #t.test(smallGeneExpress3$significant, pcs$PC50)$p.value
-ggplot(pValsPCA, aes(x=dim, y=-log10(pValsPCA), col = algorithm)) +
+ggplot(pValsdf, aes(x=dim, y=-log10(pValsPCA), col = Algorithm)) +
   geom_point()+
   geom_smooth(method = 'loess') +
   theme_bw(base_size = 18) +
-  scale_x_continuous(breaks = seq(2,50, 2))
+  scale_x_continuous(breaks = seq(2,50, 2)) +
+  xlab("k dimensions") + ylab("-log10 P-Value")
+
+#also create a scree plot for pca
 
 
