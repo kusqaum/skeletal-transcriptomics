@@ -30,7 +30,7 @@ sum(smallGeneExpress3$significant == "FALSE")
 #now we have 944 and 4426 positive and negative genes
 
 
-
+###ignore for now
 smallGeneExpressMatrix <- as.matrix(smallGeneExpress)
 smallGeneExpressMatrix <- normalize.quantiles(smallGeneExpressMatrix[,1:50])
 #smallGeneExpressMatrix$significant <- smallGeneExpress$significant
@@ -114,35 +114,47 @@ ggplot(as.data.frame(h_matrix))
 #perform PCA. each of our data points needs to be a gene so not going to transpose
 pca_res <- prcomp((smallGeneExpress3[,1:50]), scale =T)
 #look at variance
-summary(pca_res)$importance
+#summary(pca_res)$importance
 #var_explained <- summary(pca_res)$importance[2,]*100
 #get 1&2nd PCs to plot
 pcs <- data.frame(pca_res$x)
-pcs$significant <- smallGeneExpress3$significant
+#pcs$significant <- smallGeneExpress3$significant
 
 
 #t_subset <- smallGeneExpress[,50:51]
 #t.test(culture_fibroblast ~ significant, data = smallGeneExpress)
 
-tmp <- t.test(PC1 ~ significant, data = pcs)
+tmp <- t.test(smallGeneExpress3$significant, pcs[,"PC1"])
 tmp$p.value
 tmp$statistic
 #empty vector to store pvalue results:
-t_testPvaluesPC <- numeric()
+#t_testPvaluesPC <- numeric()
 #so I am going to loop through all the principal components: minus 1 b/c don't want to include last column
-for (pc in 1:(ncol(pcs)-1)) {
+#for (pc in 1:(ncol(pcs)-1)) {
   #print(pc)
   #extract the result of t-test for each
-  tresult[[pc]] <- t.test(pcs[[pc]] ~ significant, data = pcs)
+ # tresult[[pc]] <- t.test(pcs[[pc]] ~ significant, data = pcs)
   #obtain the p-value for each
-  pVal[[pc]] <- tresult[[pc]]$p.value
+  #pVal[[pc]] <- tresult[[pc]]$p.value
   #then add it to empty numeric vector created above
-  t_testPvaluesPC <- c(t_testPvaluesPC, pVal[[pc]])
+  #t_testPvaluesPC <- c(t_testPvaluesPC, pVal[[pc]])
+#}
+
+
+pValsPCA <- numeric()
+for (PC in 1:ncol(pcs)) {
+  resultfortest <- t.test(smallGeneExpress3$significant,  pcs[,PC])$p.value
+  pValsPCA <- c(pValsPCA, resultfortest)
+  #resultfortest_pval <- resultfortest$
 }
-head(data.frame(tres))
-
-
-
-
+pValsPCA <- as.data.frame(pValsPCA); pValsPCA$dimension<- colnames(pcs)
+pValsPCA$dim <- c(1:ncol(pcs))
+pValsPCA$algorithm <- c('PCA')
+#t.test(smallGeneExpress3$significant, pcs$PC50)$p.value
+ggplot(pValsPCA, aes(x=dim, y=-log10(pValsPCA), col = algorithm)) +
+  geom_point()+
+  geom_smooth(method = 'loess') +
+  theme_bw(base_size = 18) +
+  scale_x_continuous(breaks = seq(2,50, 2))
 
 
