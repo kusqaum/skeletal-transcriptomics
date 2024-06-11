@@ -10,49 +10,48 @@ row.names(labels) <- rownames(geneExpressionWithLabels)
 colnames(labels)[1] <- "significant"
 
 #just get the first 50 samples as a subset
-#smallGeneExpress <- geneExpressionWithLabels %>% select(1:50)
-smallGeneExpress2 <- geneExpressionWithLabels[,1:50]
-smallGeneExpress2 <- normalize.quantiles(as.matrix(smallGeneExpress2))
-row.names(smallGeneExpress2) <- rownames(geneExpressionWithLabels)
-colnames(smallGeneExpress2) <- colnames(geneExpressionWithLabels[,1:50])
-smallGeneExpress2 <- as.data.frame(smallGeneExpress2)
+smallGeneExpress <- geneExpressionWithLabels %>% select(1:50)
 
-smallGeneExpress3 <- smallGeneExpress2[apply(smallGeneExpress2!=0,1,all),]
-dim(smallGeneExpress3) #5370 genes left
-
-#log2 transform the data
-smallGeneExpress3 <- log2(smallGeneExpress3)
-
-#merge back with the labels now, by row:
-smallGeneExpress3 <- merge(smallGeneExpress3, labels, by = 0)
-row.names(smallGeneExpress3)<- smallGeneExpress3$Row.names; smallGeneExpress3$Row.names <- NULL
-sum(smallGeneExpress3$significant == "TRUE")
-sum(smallGeneExpress3$significant == "FALSE")
-#now we have 944 and 4426 positive and negative genes
-
-
-###ignore for now
-smallGeneExpressMatrix <- as.matrix(smallGeneExpress)
-smallGeneExpressMatrix <- normalize.quantiles(smallGeneExpressMatrix[,1:50])
-#smallGeneExpressMatrix$significant <- smallGeneExpress$significant
-row.names(smallGeneExpressMatrix) <- rownames(smallGeneExpress)
-colnames(smallGeneExpressMatrix) <- colnames(smallGeneExpress[,1:50])
-#remove rows that have value of 0:
-smallGeneExpress_2 <- as.data.frame(smallGeneExpressMatrix)
-smallGeneExpress_2$significant <- smallGeneExpress$significant
-
-smallGeneExpress_2 <- smallGeneExpress_2[apply(smallGeneExpress_2!=0,1,all),]
-smallGeneExpress_2$significant <- smallGeneExpress$significant
-#log transform
-smallGeneExpress_2 <- log2(smallGeneExpress_2)
-
-#add on the labels
-smallGeneExpress_2$significant <- smallGeneExpress$significant
-#remove genes(rows) that have a sum of 0 abundance
+#remove rows that sum to 0
 smallGeneExpress <- smallGeneExpress %>% filter(rowSums(across(where(is.numeric)))!=0)
 
-#change to matrix
-matrix <- as.matrix(smallGeneExpress)
+filteredRows <- rownames(smallGeneExpress)
+#change 0 values to 1: 
+smallGeneExpress[smallGeneExpress == 0] <- 1
+smallGeneExpress <- log2(smallGeneExpress)
+
+#lowestVal <-abs(min(smallGeneExpress))
+# add on this value to each value
+#smallGeneExpress <- smallGeneExpress+lowestVal
+#now let's normalise quantiles
+smallGeneExpress <- normalize.quantiles(as.matrix(smallGeneExpress))
+row.names(smallGeneExpress) <- filteredRows
+colnames(smallGeneExpress) <- colnames(geneExpressionWithLabels[,1:50])
+smallGeneExpress <- as.data.frame(smallGeneExpress)
+lowestVal <-abs(min(smallGeneExpress))
+smallGeneExpress <- smallGeneExpress+lowestVal
+
+
+
+#smallGeneExpress2 <- geneExpressionWithLabels[,1:50]
+#smallGeneExpress2 <- normalize.quantiles(as.matrix(smallGeneExpress2))
+#row.names(smallGeneExpress2) <- rownames(geneExpressionWithLabels)
+#colnames(smallGeneExpress2) <- colnames(geneExpressionWithLabels[,1:50])
+#smallGeneExpress2 <- as.data.frame(smallGeneExpress2)
+
+#dim(smallGeneExpress3) 
+
+#log2 transform the data
+#smallGeneExpress3 <- log2(smallGeneExpress3)
+#hist(smallGeneExpress3$t0h_3)
+#merge back with the labels now, by row:
+smallGeneExpress2 <- merge(smallGeneExpress, labels, by = 0)
+row.names(smallGeneExpress2)<- smallGeneExpress2$Row.names; smallGeneExpress2$Row.names <- NULL
+sum(smallGeneExpress2$significant == "TRUE")
+sum(smallGeneExpress2$significant == "FALSE")
+#now we have 1300 and 6578 positive and negative genes
+
+
 #nmfSeed()
 
 #determine the sequence
@@ -60,9 +59,11 @@ noRanks <- seq(2,10,2)
 #and the number of ranks
 noofruns <- 2
 #set seed as well
-res.multiRank <- nmf(abs(smallGeneExpress3[,1:50]), rank = noRanks, nrun=noofruns, seed = 123456)
-#can choose to plo just cophenetic + silhouette
-#plot(res.multiRank, 'cophenetic', 'silhouette')
+res.multiRank <- nmf(smallGeneExpress[,1:50], rank = noRanks, nrun=noofruns, seed = 123456)
+
+
+#nmf without logg transf
+#res.multiRank2 <- nmf(smallGeneExpress[,1:50], rank = noRanks, nrun=noofruns, seed = 123456)
 
 #look at performance measures of the factorisation
 summary(res.multiRank)
@@ -101,13 +102,15 @@ basis_matrices <- lapply(Wmatrices, function(w){
 })
 
 nmfMinPvals <- list()
-#go through the length of Ws
+length(Wmatrices)
+#loop through the no. of Ws not the actual matrices
 for (mt in 1:length(Wmatrices)) {
   #get ready list
   pValues <- numeric()
   #loop through each col
   for (dim in 1:ncol(Wmatrices[[mt]])) {
-    pResultNMF <- t.test(smallGeneExpress3$significant, Wmatrices[[mt]][, dim])$p.value
+    pResultNMF <- t.test(Wmatrices[[mt]][, dim] ~ smallGeneExpress2$significant)$p.value
+    boxplot(Wmatrices[[mt]][,dim]~smallGeneExpress2$significant, xlab="")
     #nmfPvals <- c(nmfPvals, pResultNMF)
     pValues <- c(pValues, pResultNMF)
   }
@@ -118,28 +121,51 @@ for (mt in 1:length(Wmatrices)) {
                               Dimension = ncol(Wmatrices[[mt]]),
                               Feature=minPdim, 
                               Algorithm = "NMF")
+  
 }
 
+
+#rbind list of dfs
 NMFfeaturesMinP <- do.call("rbind", nmfMinPvals)
+#boxplot for the feature with the most strongest signal:
+lapply(Wmatrices, function(x){
+  if(ncol(x) ==dimens){
+    #print(dimens)
+    boxplot(list(x)[,feat]~ smallGeneExpress2$significant)
+  }
+})
+
+t<-rownames(NMFfeaturesMinP)[which.min(NMFfeaturesMinP$pVals)]
+t2 <- NMFfeaturesMinP[t,]
+dimens <- as.character(t2$Dimension)
+feat <- as.character(t2$Feature)
+##########
+
+#make the current df have the dimensions as rownames:
+tempDF <- NMFfeaturesMinP
+rownames(tempDF) <- tempDF$Dimension
+
+tempDF[,min(tempDF$pVals)]
 ggplot(NMFfeaturesMinP, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
-  geom_point() +
-  stat_smooth() +
-  #theme_bw(base_size = 18) +
+  geom_point()+
+  theme_bw(base_size = 18) +
   xlab("k dimensions") + ylab("-log10 P-Value")
+
 
 # checking a single to-test p-value result here is consistent with table created above.
 tempor <- data.frame(Wmatrices[[5]])
-t.test(smallGeneExpress3$significant, tempor[, 9])$p.value
+t.test(tempor[,2] ~ smallGeneExpress2$significant)$p.value
+t.test(tempor[,2]~ smallGeneExpress2[,51])$p.value
 
 
 
 ####PCA####
 
 #perform PCA. each of our data points needs to be a gene so not going to transpose
-pca_res <- prcomp((smallGeneExpress3[,1:50]), scale =T)
+pca_res <- prcomp((smallGeneExpress2[,1:50]), scale =T)
 pcs <- data.frame(pca_res$x)
 
-tmp <- t.test(smallGeneExpress3$significant, pcs[,"PC1"])
+tmp <- t.test(smallGeneExpress2$significant, pcs[,"PC1"])
 tmp$p.value
 tmp$statistic
 #empty vector to store pvalue results:
@@ -171,7 +197,6 @@ pValsdf$Algorithm <- c('PCA')
 #t.test(smallGeneExpress3$significant, pcs$PC50)$p.value
 ggplot(pValsdf, aes(x=Dimension, y=-log10(pValsPCA), col = Algorithm)) +
   geom_point()+
-  geom_smooth(method = 'loess') +
   theme_bw(base_size = 18) +
   scale_x_continuous(breaks = seq(2,50, 2)) +
   xlab("k dimensions") + ylab("-log10 P-Value")
@@ -203,65 +228,15 @@ ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), col=Algorithm)
   xlab("k dimensions") +ylab("-log10 P-Value")+
   scale_x_continuous(breaks = seq(2,50, 2))
   
-  
+
+##save result for model training
+saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
+saveRDS(smallGeneExpress2, "processed/geneExpression.rds")
 
 
-####rough of machine learning:####
-library(tidymodels)
-library(themis)
-library(skimr)
-inputForML <- basis_matrices
-#View(Wmatrices[[1]])
-
-inputForML2 <- list()
-for (each in inputForML) {
-#  dataframe <- data.frame(unlist(each))
-  each$significant <- (smallGeneExpress3$significant)
-  inputForML2 <- append(inputForML2, list(each))
-  
-}
-
-str(inputForML2[[2]])
-temp <- inputForML2[[2]]
-#convert outcome to a factor
-temp$significant <- as.factor(temp$significant)
-str(temp)
-skim(temp)
-
-dataSplit <- initial_split(temp, prop = 0.8)
-tempTrain <- training(dataSplit)
-tempTest <- testing(dataSplit)
-
-#look at before sampling
-ggplot(tempTrain, aes(factor(significant)))+
-  geom_bar(aes(y=after_stat(count)/sum(after_stat(count))), colour = "black", fill = "lightgrey")+
-  scale_y_continuous(labels = percent)+
-  xlab("") + ylab("% of genes") +
-  theme_minimal(base_size = 20)
+##
 
 
-temp_rec <- recipe(significant ~ ., data = tempTrain) %>%
-  step_downsample(significant, under_ratio =1)
-temp_rec %>% prep() %>% bake(NULL)
-
-
-
-#how does undersampling look after
-temp_rec %>% 
-  prep()%>% 
-  juice() %>%
-  ggplot(aes(factor(significant))) +
-  geom_bar(aes(y = (after_stat(count))/sum(after_stat(count))), colour="black",fill="lightgrey") +
-  scale_y_continuous(labels = percent) +
-  xlab("") + ylab("% of genes") +
-  theme_minimal(base_size = 20)
-
-library(parsnip)
-show_engines("rand_forest")
-rf_mod <- rand_forest(trees = 100, 
-                      mtry = tune(), 
-                      mode = "classification") %>%
-  set_engine("randomForest")
 
 compressed_PCA <- pcs
 compressed_PCA$significant <- smallGeneExpress3$significant
