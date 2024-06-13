@@ -22,37 +22,45 @@ for (each in nmfMatrices) {
 
 ####real thing####
 #function for preprocessing
-splitData_fctn <- function(data, proportion){
+split_processingData_fctn <- function(data, proportion){
   #set.seed(234)
   dataSplit <- initial_split(data, prop = proportion)
   trainData <- training(dataSplit)
   testData <- testing(dataSplit)
   #create recipe
-  #rec <-recipe(significant~., data = trainData) %>%
-  # step_downsample(significant, under_ratio = 1)
+  rec <-recipe(significant~., data = trainData) %>%
+    step_downsample(significant, under_ratio = 1)
   #return(list(rec, trainData, testData))
-  return(list("train" = as.data.frame(trainData), "test"=as.data.frame(testData)))
+  return(list("train" = as.data.frame(trainData), "test"=as.data.frame(testData), "recipe"=rec))
 }
 
 #apply split data function to all matrices
-trainTest <- lapply(X=inputForML, FUN = splitData_fctn, proportion =0.8)
+processedData <- lapply(X=inputForML, FUN = splitData_fctn, proportion =0.8)
 
-trainData <- lapply(trainTest, function(w){
+#get training data
+trainData <- lapply(processedData, function(w){
   w$train
 })
 
-testData <- lapply(trainTest, function(w){
+#get testing data
+testData <- lapply(processedData, function(w){
   w$test
 })
 
-preprocessData_fctn <- function(Trainingdata){
-  rec <- recipe(significant ~., data = Trainingdata) %>%
-    step_downsample(significant, under_ratio = 1)
-  return("recipe"=rec)
-}
+#get the recipe
+theRecipe <- lapply(processedData, function(w){
+  w$recipe
+})
 
-processingRec <- lapply(X=inputForML, FUN=preprocessData_fctn)
-#processingRec$
+# ctrl+shift+C
+# preprocessData_fctn <- function(Trainingdata){
+#   rec <- recipe(significant ~., data = Trainingdata) %>%
+#     step_downsample(significant, under_ratio = 1)
+#   return("recipe"=rec)
+# }
+# 
+# processingRec <- lapply(X=inputForML, FUN=preprocessData_fctn)
+# #processingRec$
 
 
 #### some testing on just one dataset####
