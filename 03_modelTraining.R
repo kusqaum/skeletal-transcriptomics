@@ -44,9 +44,9 @@ processedData <- lapply(X=inputForML, FUN = split_processingData_fctn, proportio
 # })
 # 
 #get testing data
-testData <- lapply(processedData, function(w){
-  w$test
-})
+# testData <- lapply(processedData, function(w){
+#   w$test
+# })
 # 
 # #get the recipe
 # theRecipe <- lapply(processedData, function(w){
@@ -104,39 +104,33 @@ randForest_fctn <- function(mylist){
 }
 
 # letsTEsthardfctn3 <- lapply(processedData, FUN = hardFunctin2)
-mlResList <- lapply(randForest_fctn, FUN = hardFunctin2)
+mlResList <- lapply(processedData, FUN=randForest_fctn)
 
-# res_tune <- list()
-# for (i in 1:length(processedData)) {
-#   current <- processedData[[i]]
-#   folds <- vfold_cv(data = current$train, v=5)
-#   #list_fold <- append(list_fold, folds)
-#   model_RF <- rand_forest(trees = 500, mtry = tune(), min_n = tune(), 
-#                           mode = "classification") %>% set_engine("randomForest", importance = TRUE)
-#   
-#   upper <- ncol(current$train)-1
-#   tune_grid_rd <- grid_regular(
-#     mtry(range = c(1,upper)),
-#     min_n(range = c(1,upper)),
-#     levels = upper
-#   )
-#   theWorkflw <- workflow()%>%
-#     add_recipe(current$recipe)%>%
-#     add_model(model_RF)
-#   
-#   res_tun <- tune_grid(theWorkflw,
-#                        resamples = folds,
-#                        grid= tune_grid_rd,
-#                        control=control_grid(save_pred = T),
-#                        metrics= metric_set(roc_auc))
-#   res_tune[[i]] <- append(res_tune, res_tun)
-#   pPlot <- res_tun %>%
-#     collect_metrics() %>%
-#     ggplot(aes(x=mtry, y=mean))+
-#     geom_point()+
-#     geom_line()
-#   pPlot
-# }
+
+
+
+#### get all the auc scores ####
+auc <- lapply(mlResList, function(x){
+  x$AUC$.estimate
+})
+
+#convert each one to df
+df_auc <- lapply(auc, function(x){
+  df <- data.frame(auc_scores = x)
+})
+
+
+aucDf <-do.call("rbind", df_auc)
+
+
+#remember the dimensions that were input to model to give these outputs:
+dimensions <- data.frame(dimensions =seq(2,10,2), Algorithm = "NMF")
+resDf <- cbind(aucDf, dimensions)
+ggplot(resDf, aes(x=dimensions, y=auc_scores))+
+  geom_point() +
+  theme_classic()
+
+
 
 # ctrl+shift+C
 # preprocessData_fctn <- function(Trainingdata){
@@ -250,7 +244,6 @@ final_fit <- finalize_workflow(temp_wf, best_mod) %>%
 
 
 #final_fit%>% extract_fit_parsnip()%>%tidy()
-#library(broom)
 #ff <- finalize_workflow(temp_wf, best_mod)
 ffff <- best_mod %>% last_fit(split = dataSplit)
 
