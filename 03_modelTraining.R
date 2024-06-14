@@ -3,8 +3,9 @@ library(tidymodels)
 library(themis)
 library(skimr)
 library(tidyverse)
-#library(parsnip) don't thin I actually need this
+#library(parsnip) don't thin I actually need this cause getsloaded in with tidymodels
 library(randomForest)
+library(vip)
 
 nmfMatrices <- readRDS("processed/nmf_wMatrices.rds")
 geneExpress <- readRDS("processed/geneExpression.rds")
@@ -35,22 +36,107 @@ split_processingData_fctn <- function(data, proportion){
 }
 
 #apply split data function to all matrices
-processedData <- lapply(X=inputForML, FUN = splitData_fctn, proportion =0.8)
+processedData <- lapply(X=inputForML, FUN = split_processingData_fctn, proportion =0.8)
 
 #get training data
-trainData <- lapply(processedData, function(w){
-  w$train
-})
-
+# trainData <- lapply(processedData, function(w){
+#   w$train
+# })
+# 
 #get testing data
 testData <- lapply(processedData, function(w){
   w$test
 })
+# 
+# #get the recipe
+# theRecipe <- lapply(processedData, function(w){
+#   w$recipe
+# })
 
-#get the recipe
-theRecipe <- lapply(processedData, function(w){
-  w$recipe
-})
+# list_fold <- list()
+
+randForest_fctn <- function(mylist){
+  model_RF <- rand_forest(trees = 500, mtry = tune(), min_n = tune(), 
+                          mode = "classification") %>% set_engine("randomForest", importance = TRUE)
+  ffolds <- vfold_cv(data = mylist$train, v=5)
+  limit <- (ncol(mylist$train))-1
+  tuningGrid <- grid_regular(
+    mtry(range = c(1,limit)),
+    min_n(range = c(1,limit)),
+    levels = limit
+  )
+  #build workflow
+  wkflow <- workflow() %>%
+    add_recipe(mylist$recipe) %>%
+    add_model(model_RF)
+  #tune model
+  res <- tune_grid(
+    wkflow,
+    resamples = ffolds,
+    grid = tuningGrid,
+    control = control_grid(save_pred = TRUE),
+    metrics = metric_set(roc_auc)
+  )
+  paramsPlot <- autoplot(res)
+  # paramsPlot2 <- res %>%
+  #   collect_metrics() %>%
+  #   ggplot(aes(x=mtry, y=mean))+
+  #   geom_point()+
+  #   geom_line()
+  
+  final_model <- res %>% select_best(metric = "roc_auc")
+  
+  final_fit <- finalize_workflow(wkflow, final_model) %>%
+    fit(data = mylist$train) 
+  
+  importancePlot <- final_fit %>% extract_fit_parsnip()%>%
+    vip(geom='col',aes = list(colour="black", fill='lightblue', alpha=0.7))+
+    theme_classic()
+  
+  aug <- augment(final_fit, mylist$test)
+  roc_auc <- roc_auc(aug, significant, .pred_TRUE)
+  two_classCurve <- roc_curve(aug, truth = significant,
+                              .pred_TRUE)
+  rocCurve <- autoplot(two_classCurve)
+  
+  return(list("tuningPlots" =paramsPlot, "importance"=importancePlot,
+              "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve))
+}
+
+# letsTEsthardfctn3 <- lapply(processedData, FUN = hardFunctin2)
+mlResList <- lapply(randForest_fctn, FUN = hardFunctin2)
+
+# res_tune <- list()
+# for (i in 1:length(processedData)) {
+#   current <- processedData[[i]]
+#   folds <- vfold_cv(data = current$train, v=5)
+#   #list_fold <- append(list_fold, folds)
+#   model_RF <- rand_forest(trees = 500, mtry = tune(), min_n = tune(), 
+#                           mode = "classification") %>% set_engine("randomForest", importance = TRUE)
+#   
+#   upper <- ncol(current$train)-1
+#   tune_grid_rd <- grid_regular(
+#     mtry(range = c(1,upper)),
+#     min_n(range = c(1,upper)),
+#     levels = upper
+#   )
+#   theWorkflw <- workflow()%>%
+#     add_recipe(current$recipe)%>%
+#     add_model(model_RF)
+#   
+#   res_tun <- tune_grid(theWorkflw,
+#                        resamples = folds,
+#                        grid= tune_grid_rd,
+#                        control=control_grid(save_pred = T),
+#                        metrics= metric_set(roc_auc))
+#   res_tune[[i]] <- append(res_tune, res_tun)
+#   pPlot <- res_tun %>%
+#     collect_metrics() %>%
+#     ggplot(aes(x=mtry, y=mean))+
+#     geom_point()+
+#     geom_line()
+#   pPlot
+# }
 
 # ctrl+shift+C
 # preprocessData_fctn <- function(Trainingdata){
@@ -114,13 +200,13 @@ cv_folds <- vfold_cv(data = tempTrain, v = 5)
 
 show_engines("rand_forest")
 rf_mod <- rand_forest(trees = 500, 
-                      mtry = tune(),#min_n = tune(),
+                      mtry = tune(),min_n = tune(),
                       mode = "classification") %>%
   set_engine("randomForest", importance = TRUE)
 
 rf_tune_grid <- grid_regular(
   mtry(range = c(1,6)),
-  #min_n(range = c(1,2)),
+  min_n(range = c(1,2)),
   levels = 6
 )
 ##build workflow:
@@ -169,7 +255,6 @@ final_fit <- finalize_workflow(temp_wf, best_mod) %>%
 ffff <- best_mod %>% last_fit(split = dataSplit)
 
 
-library(vip)
 
 final_fit %>% extract_fit_parsnip() %>%
   vip(geom = 'col', aesthetics = list(colour="black", fill ="lightblue", alpha=0.7)) +
