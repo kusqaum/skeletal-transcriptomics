@@ -4,7 +4,8 @@ library(preprocessCore)
 library(NMF)
 
 
-geneExpressionWithLabels <- read.table("processed/geneExpressionDataWithLabels.txt", header = T, stringsAsFactors = F)
+# geneExpressionWithLabels <- read.table("processed/geneExpressionDataWithLabels.txt", header = T, stringsAsFactors = F)
+geneExpressionWithLabels <- readRDS("processed/mouseHumanWithLabels.rds")
 labels <- data.frame(geneExpressionWithLabels$significant)
 row.names(labels) <- rownames(geneExpressionWithLabels)
 colnames(labels)[1] <- "significant"
@@ -26,7 +27,8 @@ smallGeneExpress <- log2(smallGeneExpress)
 #now let's normalise quantiles
 smallGeneExpress <- normalize.quantiles(as.matrix(smallGeneExpress))
 row.names(smallGeneExpress) <- filteredRows
-colnames(smallGeneExpress) <- colnames(geneExpressionWithLabels[,1:50])
+#we don't really care about colnames anyways
+# colnames(smallGeneExpress) <- colnames(geneExpressionWithLabels[,1:50])
 smallGeneExpress <- as.data.frame(smallGeneExpress)
 lowestVal <-abs(min(smallGeneExpress))
 smallGeneExpress <- smallGeneExpress+lowestVal
@@ -128,17 +130,10 @@ for (mt in 1:length(Wmatrices)) {
 #rbind list of dfs
 NMFfeaturesMinP <- do.call("rbind", nmfMinPvals)
 #boxplot for the feature with the most strongest signal:
-lapply(Wmatrices, function(x){
-  if(ncol(x) ==dimens){
-    #print(dimens)
-    boxplot(list(x)[,feat]~ smallGeneExpress2$significant)
-  }
-})
+nmfStrongFeat <- NMFfeaturesMinP[which.min(NMFfeaturesMinP$pVals),]
+boxplot(Wmatrices[[which.min(NMFfeaturesMinP$pVals)]][,nmfStrongFeat$Feature] 
+        ~smallGeneExpress2$significant)
 
-t<-rownames(NMFfeaturesMinP)[which.min(NMFfeaturesMinP$pVals)]
-t2 <- NMFfeaturesMinP[t,]
-dimens <- as.character(t2$Dimension)
-feat <- as.character(t2$Feature)
 ##########
 
 #make the current df have the dimensions as rownames:
@@ -153,10 +148,10 @@ ggplot(NMFfeaturesMinP, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
 
 
 # checking a single to-test p-value result here is consistent with table created above.
-tempor <- data.frame(Wmatrices[[5]])
-t.test(tempor[,2] ~ smallGeneExpress2$significant)$p.value
-t.test(tempor[,2]~ smallGeneExpress2[,51])$p.value
-
+# tempor <- data.frame(Wmatrices[[1]])
+# t.test(tempor[,2] ~ smallGeneExpress2$significant)$p.value
+# t.test(tempor[,2]~ smallGeneExpress2[,51])$p.value
+# 
 
 
 ####PCA####
@@ -165,7 +160,7 @@ t.test(tempor[,2]~ smallGeneExpress2[,51])$p.value
 pca_res <- prcomp((smallGeneExpress2[,1:50]), scale =T)
 pcs <- data.frame(pca_res$x)
 
-tmp <- t.test(smallGeneExpress2$significant, pcs[,"PC1"])
+tmp <- t.test(pcs[,"PC3"] ~smallGeneExpress2$significant)
 tmp$p.value
 tmp$statistic
 #empty vector to store pvalue results:
@@ -184,7 +179,7 @@ tmp$statistic
 
 pValsPCA <- numeric()
 for (PC in 1:ncol(pcs)) {
-  resultfortest <- t.test(smallGeneExpress3$significant,  pcs[,PC])$p.value
+  resultfortest <- t.test(pcs[,PC]~ smallGeneExpress2$significant)$p.value
   pValsPCA <- c(pValsPCA, resultfortest)
   #resultfortest_pval <- resultfortest$
   #smallestPval <- which.min(pValsPCA)
@@ -207,7 +202,7 @@ varExpl_df <- data.frame(PC = 1:length(var_explained),
                          varianceExpl = (var_explained),
                          cumulativeVariance = cumsum(var_explained))
 
-ggplot(varExpl_df[1:8,], aes(x = PC, y = 100*cumulativeVariance)) +
+ggplot(varExpl_df[1:10,], aes(x = PC, y = 100*cumulativeVariance)) +
   geom_bar(stat = 'identity', col = 'black', fill="lightgrey") + 
   #geom_point()+
   #geom_line()+
@@ -223,7 +218,6 @@ colnames(pValsdf2)[1]<- "pVals"
 allDimensionReduction <- rbind(NMFfeaturesMinP, pValsdf2)
 ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), col=Algorithm)) +
   geom_point() +
-  geom_smooth()+
   theme_bw(base_size = 20)+
   xlab("k dimensions") +ylab("-log10 P-Value")+
   scale_x_continuous(breaks = seq(2,50, 2))
@@ -234,11 +228,88 @@ saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
 saveRDS(smallGeneExpress2, "processed/geneExpression.rds")
 
 
-##
+##### changes for PCA here: #####
+pcaSeq <- seq(2,10,2)
 
 
+# reduceFctn <- function(pcDf){
+#   for (n in 1:length(pcDf)){  
+#     listDFS <- list()
+#     for (j in pcaSeq) {
+#       reduced <- pcDf[,1:j]
+#       # listDFS[[n]] <- reduced
+#       listDFS <- append(listDFS, list(reduced))
+#     }
+#   }
+# }
 
-compressed_PCA <- pcs
-compressed_PCA$significant <- smallGeneExpress3$significant
-str(compressed_PCA)
-compressed_PCA$significant <- as.factor(compressed_PCA$significant)
+#   listofdfs <- list()
+#   theSeq <- seq(2,10,2)
+#   for (j in theSeq){
+#     reduced <- pcDf[,1:i]
+#     listofdfs[[j]] <- reduced
+#   }
+#   
+# }
+# testingAgaintimes2 <- apply(pcs,2, FUN = reduceFctn)
+
+#make the seq the same as nmf
+pcaSeq <- seq(2,10,2)
+#loop through length
+#here creating a list for all dimensions when applied PCA
+for (i in 1:length(pcaSeq)) {
+  #create empty lists
+  pcList <- list()
+
+  # testingagain <- data.frame(pcs[,1:i])
+  # testingagain <- data.frame(pcs[,i])
+  #loop through each of the dimensions
+  for (l in (pcaSeq)) {
+    #grab each dimension
+    dime <- pcs[,1:l]
+    pcList <- append(pcList, list(dime))
+    # testing[[i]] <- (testingagain)
+  }
+}
+
+#make a function to take in the list of dfs created above
+pca_function <- function(listPCAres){
+  #dataframe <- list()
+  pvalList <- numeric()
+  for (pc in 1:ncol(listPCAres)){
+    pvalueResult <- t.test(listPCAres[,pc]~smallGeneExpress2$significant)$p.value
+    pvalList <-c(pvalList, pvalueResult)
+  }
+  minPval <- min(pvalList)
+  mindim <- which.min(pvalList)
+  dataframe <- data.frame(pVals = minPval,
+                          Dimension = ncol(listPCAres),
+                          Feature=mindim, 
+                          Algorithm = "PCA")
+}
+
+#########test fccctn on 1 dataset
+test <-pcList[[1]]
+t <- numeric()
+for (v in 1:ncol(test)) {
+  
+  pres <- t.test(test[,v]~smallGeneExpress2$significant)$p.value
+  t <- c(t, pres)
+}
+min(t)
+which.min(t)
+dataf <- data.frame(value = min(t), dimen = ncol(test), f = which.min(t))
+###############
+
+pcaDfs <- lapply(pcList, FUN=pca_function)
+pvalsPcaDf <- do.call(rbind, pcaDfs)
+ggplot(pvalsPcaDf, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
+  geom_point()+
+  theme_bw(base_size = 18) +
+  xlab("k dimensions") + ylab("-log10 P-Value")
+
+
+# # compressed_PCA <- pcs
+# compressed_PCA$significant <- smallGeneExpress3$significant
+# str(compressed_PCA)
+# compressed_PCA$significant <- as.factor(compressed_PCA$significant)
