@@ -3,7 +3,7 @@ library(tidyverse)
 library(preprocessCore)
 library(NMF)
 
-
+####read in gene expression data
 # geneExpressionWithLabels <- read.table("processed/geneExpressionDataWithLabels.txt", header = T, stringsAsFactors = F)
 geneExpressionWithLabels <- readRDS("processed/mouseHumanWithLabels.rds")
 labels <- data.frame(geneExpressionWithLabels$significant)
@@ -15,7 +15,7 @@ smallGeneExpress <- geneExpressionWithLabels %>% select(1:50)
 
 #remove rows that sum to 0
 smallGeneExpress <- smallGeneExpress %>% filter(rowSums(across(where(is.numeric)))!=0)
-
+####log transform and normalise####
 filteredRows <- rownames(smallGeneExpress)
 #change 0 values to 1: 
 smallGeneExpress[smallGeneExpress == 0] <- 1
@@ -55,7 +55,7 @@ sum(smallGeneExpress2$significant == "FALSE")
 
 
 #nmfSeed()
-
+####perform NMF####
 #determine the sequence
 noRanks <- seq(2,10,2)
 #and the number of ranks
@@ -103,6 +103,8 @@ basis_matrices <- lapply(Wmatrices, function(w){
   data.frame(list(w))
 })
 
+#### perform t-test on NMf result####
+#(all dimensions and obtain smallest p-value on each one)
 nmfMinPvals <- list()
 length(Wmatrices)
 #loop through the no. of Ws not the actual matrices
@@ -126,7 +128,7 @@ for (mt in 1:length(Wmatrices)) {
   
 }
 
-
+####boxplot for feature giving strongest signal NMF####
 #rbind list of dfs
 NMFfeaturesMinP <- do.call("rbind", nmfMinPvals)
 #boxplot for the feature with the most strongest signal:
@@ -134,13 +136,8 @@ nmfStrongFeat <- NMFfeaturesMinP[which.min(NMFfeaturesMinP$pVals),]
 boxplot(Wmatrices[[which.min(NMFfeaturesMinP$pVals)]][,nmfStrongFeat$Feature] 
         ~smallGeneExpress2$significant)
 
-##########
 
-#make the current df have the dimensions as rownames:
-tempDF <- NMFfeaturesMinP
-rownames(tempDF) <- tempDF$Dimension
-
-tempDF[,min(tempDF$pVals)]
+#plot result 
 ggplot(NMFfeaturesMinP, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
   geom_point()+
   theme_bw(base_size = 18) +
@@ -154,7 +151,7 @@ ggplot(NMFfeaturesMinP, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
 # 
 
 
-####PCA####
+####perform PCA####
 
 #perform PCA. each of our data points needs to be a gene so not going to transpose
 pca_res <- prcomp((smallGeneExpress2[,1:50]), scale =T)
@@ -176,7 +173,7 @@ tmp$statistic
   #t_testPvaluesPC <- c(t_testPvaluesPC, pVal[[pc]])
 #}
 
-
+#first plot created
 pValsPCA <- numeric()
 for (PC in 1:ncol(pcs)) {
   resultfortest <- t.test(pcs[,PC]~ smallGeneExpress2$significant)$p.value
@@ -228,7 +225,7 @@ saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
 saveRDS(smallGeneExpress2, "processed/geneExpression.rds")
 
 
-##### changes for PCA here: #####
+##### changes for PCA dimension reduction here: #####
 pcaSeq <- seq(2,10,2)
 
 
@@ -268,10 +265,11 @@ for (i in 1:length(pcaSeq)) {
     #grab each dimension
     dime <- pcs[,1:l]
     pcList <- append(pcList, list(dime))
-    # testing[[i]] <- (testingagain)
+    
   }
 }
 
+####changes for PCA t-testing here####
 #make a function to take in the list of dfs created above
 pca_function <- function(listPCAres){
   #dataframe <- list()
@@ -288,7 +286,8 @@ pca_function <- function(listPCAres){
                           Algorithm = "PCA")
 }
 
-#########test fccctn on 1 dataset
+
+#########test fctn on 1 dataset####
 test <-pcList[[1]]
 t <- numeric()
 for (v in 1:ncol(test)) {
@@ -308,6 +307,9 @@ ggplot(pvalsPcaDf, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
   theme_bw(base_size = 18) +
   xlab("k dimensions") + ylab("-log10 P-Value")
 
+pcaStrongFeat <- pvalsPcaDf[which.min(pvalsPcaDf$pVals),]
+boxplot(pcList[[which.min(pvalsPcaDf$pVals)]][,pcaStrongFeat$Feature] 
+        ~smallGeneExpress2$significant)
 
 # # compressed_PCA <- pcs
 # compressed_PCA$significant <- smallGeneExpress3$significant
