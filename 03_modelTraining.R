@@ -9,18 +9,24 @@ library(vip)
 
 nmfMatrices <- readRDS("processed/nmf_wMatrices.rds")
 geneExpress <- readRDS("processed/geneExpression.rds")
+pcaDfs <- readRDS("processed/pcaDataframes.rds")
+
 #inputForML <- basis_matrices
 #View(Wmatrices[[1]])
 
-inputForML <- list()
-for (each in nmfMatrices) {
-  #  dataframe <- data.frame(unlist(each))
-  each$significant <- (geneExpress$significant)
-  each$significant <- as.factor(each$significant)
-  inputForML <- append(inputForML, list(each))
+# inputForML <- list()
+# for (each in nmfMatrices) {
+#   #  dataframe <- data.frame(unlist(each))
+#   each$significant <- (geneExpress$significant)
+#   each$significant <- as.factor(each$significant)
+#   inputForML <- append(inputForML, list(each))
+# }
+#can just make a function to add labels to each df of the list instead of for loop
+addLabels<- function(list){
+  list %>%mutate(significant = as.factor(geneExpress$significant))
 }
-
-
+pcaWithLabels<- lapply(pcaDfs, FUN = addLabels)
+nmfWithLabels <- lapply(nmfMatrices, FUN = addLabels)
 ####real thing####
 #function for preprocessing
 split_processingData_fctn <- function(data, proportion){
@@ -37,7 +43,7 @@ split_processingData_fctn <- function(data, proportion){
 
 #apply split data function to all matrices
 processedData <- lapply(X=inputForML, FUN = split_processingData_fctn, proportion =0.8)
-
+pcaProcessed <- lapply(X=pcaWithLabels, FUN = split_processingData_fctn, proportion = 0.8)
 #get training data
 # trainData <- lapply(processedData, function(w){
 #   w$train
@@ -105,7 +111,7 @@ randForest_fctn <- function(mylist){
 
 # letsTEsthardfctn3 <- lapply(processedData, FUN = hardFunctin2)
 mlResList <- lapply(processedData, FUN=randForest_fctn)
-
+pcaDataMlResList <- lapply(pcaProcessed, FUN=randForest_fctn)
 
 
 
