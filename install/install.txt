@@ -1,0 +1,9 @@
+Bootstrap: docker
+From: eddelbuettel/r2u:jammy
+
+%post
+apt-get update &&
+apt-get -y install --no-install-recommends git bzip2 libglpk-dev libjpeg-dev libz-dev libxt-dev libtiff5-dev libbz2-dev libfontconfig1-dev libssl-dev cmake && rm -rf /var/lib/apt/lists/*
+        
+#install the R libraries needed
+Rscript install.R
