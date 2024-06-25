@@ -6,11 +6,13 @@ library(tidyverse)
 #library(parsnip) don't thin I actually need this cause getsloaded in with tidymodels
 library(randomForest)
 library(vip)
+library(future)
 
+#will have to change these files to load in the latest files btw..
 nmfMatrices <- readRDS("processed/nmf_wMatrices.rds")
 geneExpress <- readRDS("processed/geneExpression.rds")
 pcaDfs <- readRDS("processed/pcaDataframes.rds")
-
+str(pcaDfs[[1]]$significant)
 #inputForML <- basis_matrices
 #View(Wmatrices[[1]])
 
@@ -25,12 +27,17 @@ pcaDfs <- readRDS("processed/pcaDataframes.rds")
 addLabels<- function(list){
   list %>%mutate(significant = as.factor(geneExpress$significant))
 }
+changeTofact <- function(list){
+  list %>% mutate_if(is.logical, as.factor)
+}
+temport <- lapply(labelledGenesNMFRes, FUN = changeTofact)
 pcaWithLabels<- lapply(pcaDfs, FUN = addLabels)
 nmfWithLabels <- lapply(nmfMatrices, FUN = addLabels)
+
 ####real thing####
 #function for preprocessing
 split_processingData_fctn <- function(data, proportion){
-  #set.seed(234)
+  set.seed(123)
   dataSplit <- initial_split(data, prop = proportion)
   trainData <- training(dataSplit)
   testData <- testing(dataSplit)
@@ -42,8 +49,10 @@ split_processingData_fctn <- function(data, proportion){
 }
 
 #apply split data function to all matrices
-processedData <- lapply(X=inputForML, FUN = split_processingData_fctn, proportion =0.8)
-pcaProcessed <- lapply(X=pcaWithLabels, FUN = split_processingData_fctn, proportion = 0.8)
+processedData <- lapply(X=nmfWithLabels, FUN = split_processingData_fctn, proportion =0.8)
+pcaProcessed <- lapply(X=pcaDfs, FUN = split_processingData_fctn, proportion = 0.8)
+temporart<- lapply(X=temport,FUN = split_processingData_fctn, proportion=.8)
+
 #get training data
 # trainData <- lapply(processedData, function(w){
 #   w$train
@@ -64,7 +73,9 @@ pcaProcessed <- lapply(X=pcaWithLabels, FUN = split_processingData_fctn, proport
 randForest_fctn <- function(mylist){
   model_RF <- rand_forest(trees = 500, mtry = tune(), min_n = tune(), 
                           mode = "classification") %>% set_engine("randomForest", importance = TRUE)
-  ffolds <- vfold_cv(data = mylist$train, v=5)
+  set.seed(234)
+  
+  ffolds <- vfold_cv(data = mylist$train, v=2)
   limit <- (ncol(mylist$train))-1
   tuningGrid <- grid_regular(
     mtry(range = c(1,limit)),
@@ -76,12 +87,14 @@ randForest_fctn <- function(mylist){
     add_recipe(mylist$recipe) %>%
     add_model(model_RF)
   #tune model
+  #plan(multisession, workers = 16)
   res <- tune_grid(
     wkflow,
     resamples = ffolds,
     grid = tuningGrid,
-    control = control_grid(save_pred = TRUE),
-    metrics = metric_set(roc_auc)
+    control = control_grid(save_pred = TRUE, 
+                           parallel_over = "everything"),
+    metrics = metric_set(roc_auc),
   )
   paramsPlot <- autoplot(res)
   # paramsPlot2 <- res %>%
@@ -109,10 +122,14 @@ randForest_fctn <- function(mylist){
               "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve))
 }
 
-# letsTEsthardfctn3 <- lapply(processedData, FUN = hardFunctin2)
-mlResList <- lapply(processedData, FUN=randForest_fctn)
-pcaDataMlResList <- lapply(pcaProcessed, FUN=randForest_fctn)
+library(future)
+availableCores()
+plan(multisession, workers = availableCores())
 
+mlResList <- lapply(processedData, FUN=randForest_fctn)
+
+pcaDataMlResList <- lapply(pcaProcessed, FUN=randForest_fctn)
+# saveRDS(mlResList, "processed/test_03.rds")
 
 
 #### get all the auc scores ####
@@ -139,14 +156,6 @@ ggplot(resDf, aes(x=dimensions, y=auc_scores))+
 
 
 # ctrl+shift+C
-# preprocessData_fctn <- function(Trainingdata){
-#   rec <- recipe(significant ~., data = Trainingdata) %>%
-#     step_downsample(significant, under_ratio = 1)
-#   return("recipe"=rec)
-# }
-# 
-# processingRec <- lapply(X=inputForML, FUN=preprocessData_fctn)
-# #processingRec$
 
 
 #### some testing on just one dataset####
@@ -154,7 +163,7 @@ ggplot(resDf, aes(x=dimensions, y=auc_scores))+
 
 
 str(inputForML[[2]])
-temp <- inputForML[[5]]
+temp <- nmfWithLabels[[5]]
 #temp <- temp %>% select(1,4,5,6,7,10)
 
 #convert outcome to a factor
@@ -176,7 +185,7 @@ ggplot(tempTrain, aes(factor(significant)))+
 
 temp_rec <- recipe(significant ~ ., data = tempTrain) %>%
   step_downsample(significant, under_ratio =1)
-  #step_select_vip()
+  
 temp_rec %>% prep() %>% bake(NULL)
 
 
@@ -221,7 +230,7 @@ tune_rf <- tune_grid(
   temp_wf,
   resamples = cv_folds,
   grid = rf_tune_grid,
-  control = control_grid(save_pred = TRUE),
+  control = control_grid(save_pred = TRUE), parallel_over="everything",
   metrics = metric_set(roc_auc)
 ) #had to install package randomForest for this to work
 ##now fit model on 
