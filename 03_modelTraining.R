@@ -6,6 +6,7 @@ library(tidyverse)
 #library(parsnip) don't thin I actually need this cause gets loaded in with tidymodels
 library(randomForest)
 library(vip)
+library(xgboost)
 # library(future)
 
 #will have to change these files to load in the latest files btw..
@@ -204,7 +205,49 @@ nmfDataMlResList <- lapply(nmfProcessed, FUN=randForest_fctn, algorithm="NMF")
 # saveRDS(mlResList, "processed/test_03.rds")
 # saveRDS(nmfDataMlResList, "processed/tempMLResults.rds")
 # pcaProcessed[[1]]
-
+xgboost_fctn <- function(preprocessResult) {
+  model_xgb <- boost_tree(trees = tune(), mtry=tune(), min_n = tune(), learn_rate = tune(),
+                          loss_reduction = tune(), mode = "classification") %>%
+    set_engine("xgboost")
+  folds <- vfold_cv(data = preprocessResult$train, v=5, repeats = 5)
+  limit <- ncol(preprocessResult$train)-1
+  
+  xgbGrid <- grid_regular(
+    trees(range = c(1,2000)),
+    mtry(range = c(1,limit)),
+    min_n(range = c(1,limit)),
+    learn_rate(range = c(-10,-1)),
+    loss_reduction(range = c(-10,1.5)),
+    levels = limit
+  )
+  wkflow<- workflow() %>%
+    add_recipe(preprocessResult$recipe) %>%
+    add_model(model_xgb)
+  
+  res <- tune_grid(
+    wkflow,
+    resamples = folds,
+    grid = xgbGrid,
+    control = control_grid(save_pred = TRUE),
+    metrics = metric_set(roc_auc)
+  )
+  
+  final_model <- res %>% select_best(metric = "roc_auc")
+  
+  final_fit <- finalize_workflow(wkflow, final_model) %>%
+    fit(data = preprocessResult$train) 
+  
+  aug <- augment(final_fit, preprocessResult$test)
+  aug_m <- aug %>% mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
+  
+  roc_auc <- roc_auc(aug, significant, .pred_FALSE)
+  two_classCurve <- roc_curve(aug, truth = significant,
+                              .pred_FALSE)
+  rocCurve <- autoplot(two_classCurve)
+  
+}
+plan(multisession, workers = 10)
+resulting_xgb <- xgboost_fctn(split_score100dim)
 
  
 #-----------------------------------------------------------------------------------------------------------------------
