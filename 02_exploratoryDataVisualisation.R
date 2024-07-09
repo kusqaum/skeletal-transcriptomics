@@ -43,7 +43,7 @@ fullGeneExpressforNMF <- fullGeneExpressforNMF+lowestValue
 head(fullGeneExpressforNMF[1:5,1:5])
 fullGeneExpressforPCA <- as.data.frame(fullGeneExpressN)
 head(fullGeneExpressforPCA[1:5,1:5])
-
+saveRDS(fullGeneExpressforPCA, "processed/fullGeneExpressForPCA.rds")
 
 # sum(smallGeneExpress2$significant == "TRUE")
 # sum(smallGeneExpress2$significant == "FALSE")
@@ -61,23 +61,24 @@ noofruns <- 2
 set.seed(1234)
 Ranks <- c(5,10)
 
-
-shuffled <- randomize(fullGeneExpressforNMF); row.names(shuffled)<- row.names(fullGeneExpressforNMF)
+##generate shuffled data
+shuffledNMF <- randomize(fullGeneExpressforNMF); row.names(shuffledNMF)<- row.names(fullGeneExpressforNMF)
 # library(future)
 # plan(multisession, workers = availableCores())
 
 res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
+saveRDS(res.multiRank, "processed/res.multiRank.rds")
 # res.multiRank <- nmf(as.data.frame(shuffled)[1:10], rank = c(5,10), nrun=noofruns, seed = 123456)
 #^ gives the same result for t test
 
-res.test <- nmf(fullGeneExpressforNMF[1:10], rank = c(5,10), seed=123456)
+# res.test <- nmf(fullGeneExpressforNMF[1:10], rank = c(5,10), seed=123456)
 
 #nmf without logg transf
 #res.multiRank2 <- nmf(smallGeneExpress[,1:50], rank = noRanks, nrun=noofruns, seed = 123456)
 
 #look at performance measures of the factorisation
 summary(res.multiRank)
-# consensusmap(res.multiRank, labCol = NA, labRow = 1)
+consensusmap(res.multiRank, labCol = NA, labRow = 1)
 
 #res.multi.method <- nmf(smallGeneExpress[,1:50], 2, seed =123456, list("brunet","lee", "ns"), .options= "t")
 #compare(res.multi.method)
@@ -116,14 +117,14 @@ basis_matrices <- lapply(Wmatrices, function(w){
 getLabelledGenesFctn <- function(matrixList, knownLabels){
   merged <- merge(matrixList, knownLabels, by=0);rownames(merged) <- merged$Row.names; merged$Row.names <- NULL
   return(merged)
-}  
+}
 #this is for NMF machine learning -cool
 labelledGenesNMFRes <- lapply(Wmatrices, FUN=getLabelledGenesFctn, labelsFullDf)
 #dim to check merged correctly just in case
 dim(labelledGenesNMFRes[[1]])
 head(labelledGenesNMFRes[[1]])
-
-
+labelledGenesNMFResTest <- labelledGenesNMFRes
+s<- lapply(Wmatrices, FUN=getLabelledGenesFctn, labelsFullDf)
 
 
 ####perform PCA####
@@ -140,7 +141,22 @@ dim(pcsLabelled)
 tmp <- t.test(y=as.logical(pcsLabelled$significant), x=pcsLabelled[,518])
 tmp$p.value
 tmp$statistic
+t.test(pcsLabelled$PC2 ~ mouseHumanWithLabs$significant)$p.value
 
+####do pca on shuffled data and then let's do machine learning
+shuffledPCA<- randomize(fullGeneExpressforPCA); rownames(shuffledPCA)<- rownames(fullGeneExpressforPCA)
+pcaRes_shuffled <- prcomp(shuffledPCA, scale. = T)
+shuffPCs <- pcaRes_shuffled$x
+#just test on dim 50 or 100
+shuffPCsdim50 <- shuffPCs[,1:50]
+#add on labels:
+shuffPCsdim50_L <- merge(shuffPCsdim50, labelsFullDf, by=0)
+rownames(shuffPCsdim50_L)<- shuffPCsdim50_L$Row.names ;shuffPCsdim50_L$Row.names<- NULL
+head(shuffPCsdim50_L)
+
+#split and create rec
+shuff_Split <- split_processingData_fctn(shuffPCsdim50_L, proportion = 0.8)
+shuff_MLRes <- justToTestRF(shuff_Split, algorithm = "PCA")
 
 removeLabelsFctn <- function(dataWithLabels){
   dataWithLabels[,ncol(dataWithLabels)] <- NULL
@@ -154,14 +170,14 @@ varExpl_df <- data.frame(PC = 1:length(var_explained),
                          cumulativeVariance = cumsum(var_explained))
 
 ggplot(varExpl_df[1:200,], aes(x = PC, y = 100*cumulativeVariance)) +
-  geom_bar(stat = 'identity', col = 'black', fill="lightgrey") + 
+  geom_bar(stat = 'identity', col = 'black', fill="lightgrey") +
   #geom_point()+
   #geom_line()+
   theme_classic(base_size = 20) +
   geom_hline(yintercept = 90, col = "red", lty = "dashed")+
   #scale_x_continuous(breaks = seq(1, nrow(varExpl_df[1:200,]), 1)) +
   xlab("PC index") + ylab("% explained variance by principal components")
-  
+
   #xlim(0, 10)
 
 
@@ -185,7 +201,9 @@ for (i in 1:length(ranks)) {
 }
 # pcList is also for PCA machine learning-
 
-####changes for PCA t-testing here####
+##
+
+####changes for PCA t-testing here####-update made a new fctn
 #make a function to take in the list of dfs created above
 # pca_function <- function(listPCAres, labs){
 #   #dataframe <- list()
@@ -198,7 +216,7 @@ for (i in 1:length(ranks)) {
 #   mindim <- which.min(pvalList)
 #   dataframe <- data.frame(pVals = minPval,
 #                           Dimension = ncol(listPCAres),
-#                           Feature=mindim, 
+#                           Feature=mindim,
 #                           Algorithm = "PCA")
 # }
 
@@ -208,7 +226,7 @@ for (i in 1:length(ranks)) {
 #### perform t-test on NMf result#### ignore this for now because have made a function to do it for both pca and nmf
 #(all dimensions and obtain smallest p-value on each one)
 # nmfMinPvals <- list()
-# 
+#
 # length(Wmatrices)
 # #loop through the no. of Ws not the actual matrices
 # for (mt in 1:length(Wmatrices)) {
@@ -226,9 +244,9 @@ for (i in 1:length(ranks)) {
 #   minPdim <- which.min(pValues)
 #   nmfMinPvals[[mt]] <- data.frame(pVals = minP,
 #                               Dimension = ncol(Wmatrices[[mt]]),
-#                               Feature=minPdim, 
+#                               Feature=minPdim,
 #                               Algorithm = "NMF")
-#   
+#
 # }
 
 
@@ -240,48 +258,59 @@ t.test(y=as.logical(mouseHumanWithLabs$significant), x=tempor$X5)$statistic
 t.test(y=as.logical(mouseHumanWithLabs$significant), x=basis_matrices[[2]]$X5)$statistic
 t.test(y=as.logical(mouseHumanWithLabs$significant), x=basis_matrices[[2]]$X5)$p.value
 
-# 
+#
 
 
-performTtestFctn = function(listRes, labels, algorithm){
+performTtestFctn = function(listRes, labels, algorithm){ 
   if(algorithm == "PCA"){
     pvalList <- numeric()
     for (c in 1:ncol(listRes)){
-      pvalueResult <- t.test(y=as.logical(labels), x=(listRes[,c]))$p.value
+      # df <- as.data.frame(merge(listRes[,c], labels, by = 0)); df$Row.names <-NULL
+      # print(head(df))
+      # df_T <- df %>% filter(y=="TRUE")
+      # df_t <- c(df_T$x)
+      # df_F <- df%>% filter(y=="FALSE")
+      # df_f <- c(df_F$x)
+      # 
+      # pvalueResult <- t.test(df_f, df_t, var.equal=F)$p.value
+      pvalueResult <- t.test(y=as.logical(labels) , x=listRes[,c])$p.value
       pvalList <-c(pvalList, pvalueResult)
     }
     minPval <- min(pvalList)
     mindim <- which.min(pvalList)
     dataframe <- data.frame(pVals = minPval,
                             Dimension = ncol(listRes),
-                            Feature=mindim, 
+                            Feature=mindim,
                             Algorithm = algorithm)
-    
+
   }
   else if(algorithm == "NMF"){
-    
+
     pvalList <- numeric()
     for (c in 1:ncol(listRes)){
-      pvalueResult <- t.test(y=as.logical(labels), x=(listRes[,c]))$p.value
+      pvalueResult <- t.test((listRes[,c]) ~ labels)$p.value
       pvalList <-c(pvalList, pvalueResult)
     }
     minPval <- min(pvalList)
     mindim <- which.min(pvalList)
     dataframe <- data.frame(pVals = minPval,
                             Dimension = ncol(listRes),
-                            Feature=mindim, 
+                            Feature=mindim,
                             Algorithm = algorithm)
-    
+
   }
 }
 
-pcaDimPValues <- lapply(X = pcList, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="PCA")
-pcaDimPValues2 <- lapply(X=pcList2, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="PCA")
-nmfpvaluesres <- lapply(X=Wmatrices, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="NMF")
-
+# labelledGenesNMFRes <- lapply(basis_matrices)
+unlabelledNMFgenes <- lapply((labelledGenesNMFRes), removeLabelsFctn)
+pcaDimPValues <- lapply(X = pcList, FUN = performTtestFctn, labels = labelsFullDf$significant, algorithm="PCA")
+ # pcaDimPValues2 <- lapply(X=pcList2, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="PCA")
+nmfMinPvals <- lapply(X=unlabelledNMFgenes, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="NMF")
+t.test(labelledGenesNMFRes[[5]][,4] ~ labelledGenesNMFRes[[5]][,ncol(labelledGenesNMFRes[[5]])])$p.value
 ncol(labelledGenesNMFRes[[1]])
-
-
+head(pcList[[1]])
+pl <- pcList[[1]][,2]
+then <- data.frame(merge(pl, labelsFullDf$significant, by=0))
 
 
 # genesNMFres <- lapply(labelledGenesNMFRes,removeLabelsFctn)
@@ -297,17 +326,33 @@ ggplot(pvalsPcaDf, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
   xlab("k dimensions") + ylab("-log10 P-Value")
 
 pcaStrongFeat <- pvalsPcaDf[which.min(pvalsPcaDf$pVals),]
-boxplot(pcList[[which.min(pvalsPcaDf$pVals)]][,pcaStrongFeat$Feature] 
+pcaFeature <- pvalsPcaDf[which.min(pvalsPcaDf$pVals),]$Feature
+pcaDim <-pvalsPcaDf[which.min(pvalsPcaDf$pVals),]$Dimension
+boxplot(pcList[[which.min(pvalsPcaDf$pVals)]][,pcaStrongFeat$Feature]
         ~labelsFullDf$significant)
+pcaFeatForBoxplot <- data.frame(Feature = pcList[[which.min(pvalsPcaDf$pVals)]][,pcaStrongFeat$Feature],
+                     labels = labelsFullDf$significant)
+pcaFeatForBoxplot <- pcaFeatForBoxplot %>%mutate(Association = case_when(labels=="TRUE"~"Associated", labels=="FALSE"~"Not associated"))
 
-
-
+ggplot(pcaFeatForBoxplot, aes(x=Association, y=Feature))+
+  geom_boxplot()+
+  ylab(paste0("PCA Feature ", pcaFeature, " (", "k =", pcaDim, ")", sep = " "))+
+  xlab("")
 ####boxplot for feature giving strongest signal NMF####
 #rbind list of dfs
 NMFfeaturesMinP <- do.call("rbind", nmfMinPvals)
 #boxplot for the feature with the most strongest signal:
 nmfStrongFeat <- NMFfeaturesMinP[which.min(NMFfeaturesMinP$pVals),]
-boxplot(Wmatrices[[which.min(NMFfeaturesMinP$pVals)]][,nmfStrongFeat$Feature]
+nmfFeature <- NMFfeaturesMinP[which.min(NMFfeaturesMinP$pVals),]$Feature
+nmfDim <- NMFfeaturesMinP[which.min(NMFfeaturesMinP$pVals),]$Dimension
+nmfFeatForBoxplot <- data.frame(Feature = labelledGenesNMFRes[[which.min(NMFfeaturesMinP$pVals)]][,nmfStrongFeat$Feature],
+                                labels = labelsFullDf$significant)
+nmfFeatForBoxplot <- nmfFeatForBoxplot %>%mutate(Association = case_when(labels=="TRUE"~"Associated", labels=="FALSE"~"Not associated"))
+ggplot(nmfFeatForBoxplot, aes(x=Association, y=Feature))+
+  geom_boxplot()+
+  ylab(paste0("NMF Feature ", nmfFeature, " (", "k =", nmfDim, ")", sep = " "))+
+  xlab("")
+boxplot(labelledGenesNMFRes[[which.min(NMFfeaturesMinP$pVals)]][,nmfStrongFeat$Feature]
 ~mouseHumanWithLabs$significant)
 
 
@@ -318,20 +363,24 @@ ggplot(NMFfeaturesMinP, aes(x = Dimension, y=-log10(pVals), col = Algorithm)) +
   xlab("k dimensions") + ylab("-log10 P-Value")
 
 
-####plot for both algorithms on one page####
+###plot for both algorithms on one page####
 # pValsdf2 <- pValsdf
 # colnames(pValsdf2)[1]<- "pVals"
-# allDimensionReduction <- rbind(NMFfeaturesMinP, pValsdf2)
-# ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), col=Algorithm)) +
-#   geom_point() +
-#   theme_bw(base_size = 20)+
-#   xlab("k dimensions") +ylab("-log10 P-Value")+
-#   scale_x_continuous(breaks = seq(2,50, 2))
-# 
+allDimensionReduction <- rbind(NMFfeaturesMinP, pvalsPcaDf)
+ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), size=Algorithm, col=Algorithm, shape=Algorithm)) +
+  geom_point() +
+  theme_bw(base_size = 20)+
+  xlab("k dimensions") +ylab("-log10 P-Value")+
+  scale_colour_manual(values = c("mediumpurple", "tan2"))+
+  scale_size_manual(values = c(7, 5))
+  # scale_x_continuous(breaks = seq(2,50, 2))
+
+#now save this plot
 
 
 
 labelledGenesPCARes <- lapply(pcList, FUN = getLabelledGenesFctn, labelsFullDf)
+# labelledGenesNMFRes
 
 saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
 saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
@@ -340,3 +389,49 @@ saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
 # saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
 # saveRDS(smallGeneExpress2, "processed/geneExpression.rds")
 # saveRDS(smallGeneExpress2, "processed/tempGeneExpress.rds")
+
+
+
+####i want to get all the unlabelled genes####
+fullGeneExpressN <- as.data.frame(fullGeneExpressN)
+noLabels <- row.names(fullGeneExpressN)[!row.names(fullGeneExpressN) %in%
+                                          row.names(mouseHumanWithLabs)]
+unlabelled <- fullGeneExpressN[noLabels,]
+saveRDS(unlabelled, "processed/unlabelledGenes.rds")
+
+
+
+
+#--------------------------------------------------------------------------
+#temp for go terms potentially
+# just extract pc50 for now:
+pc50 <- pcList[[3]]
+pc50_1<-pc50
+pc50_1$significant <- labelsFullDf$significant
+goTerms <- goTerms %>% distinct(ensembl_gene_id, .keep_all = T)
+rownames(goTerms)<- goTerms$ensembl_gene_id
+pc50go <- merge(pc50, goTerms, by=0)
+rownames(pc50go) <- pc50go$Row.names; pc50go$Row.names <- NULL; pc50go$ensembl_gene_id<- NULL
+
+pc50go$significant <- labelsFullDf$significant
+pc50go2 <- pc50go%>% filter(go_id!="")
+
+GOsplit_processingData_fctn <- function(data, proportion){
+  set.seed(123)
+  dataSplit <- initial_split(data, prop = proportion)
+  trainData <- training(dataSplit)
+  testData <- testing(dataSplit)
+  #create recipe
+  rec <-recipe(significant~., data = trainData) %>%
+    step_downsample(significant, under_ratio = 1, seed = 456) %>%
+    step_dummy(go_id)
+  #return(list(rec, trainData, testData))
+  return(list("train" = as.data.frame(trainData), "test"=as.data.frame(testData), "recipe"=rec))
+}
+
+split <- GOsplit_processingData_fctn(pc50go2, .8)
+split2<- split_processingData_fctn(pc50_1, 0.8)
+plan(multisession, workers=availableCores())
+resultMLWithGO<- justToTestRF(split, algorithm="PCA")
+
+
