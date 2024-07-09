@@ -12,6 +12,7 @@ fullGeneExpress <- readRDS("processed/geneExpressForDimRed.rds")
 mouseHumanWithLabs <- readRDS("processed/mouseHumanWithLabels.rds")
 mouseHumanWithLabs$significant <- as.factor(mouseHumanWithLabs$significant)
 labelsFullDf <- data.frame("significant"=mouseHumanWithLabs$significant, row.names = rownames(mouseHumanWithLabs))
+write.table(labelsFullDf, "processed/labelsFullDf.txt", row.names = T, sep = "\t", quote = F)
 
 #remove rows summing to 0
 fullGeneExpress <- fullGeneExpress[rowSums(fullGeneExpress)>0,] 
@@ -434,4 +435,135 @@ split2<- split_processingData_fctn(pc50_1, 0.8)
 plan(multisession, workers=availableCores())
 resultMLWithGO<- justToTestRF(split, algorithm="PCA")
 
-
+###
+#function:
+justToTestRF <- function(preprocessResult, algorithm){
+  if(algorithm == "NMF"){
+    model_RF <- rand_forest(trees = 500, mtry = sqrt(ncol(preprocessResult$train)), min_n = tune(), 
+                            mode = "classification") %>% set_engine("randomForest", importance = TRUE)
+    set.seed(234)
+    
+    folds <- vfold_cv(data = preprocessResult$train, v=3)
+    limit <- (ncol(preprocessResult$train))-1
+    tuningGrid <- grid_regular(
+      #trees(range = c(1,2000)),
+      #mtry(range = c(1,limit)),
+      min_n(range = c(1,limit)),
+      levels = limit
+    )
+    #build workflow
+    wkflow <- workflow() %>%
+      add_recipe(preprocessResult$recipe) %>%
+      add_model(model_RF)
+    #tune model
+    #plan(multisession, workers = 16)
+    res <- tune_grid(
+      wkflow,
+      resamples = folds,
+      grid = tuningGrid,
+      control = control_grid(save_pred = TRUE),
+      metrics = metric_set(roc_auc),
+    )
+    resDf <- res %>% collect_metrics() %>%
+      mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
+    paramsPlot <- autoplot(res)
+    paramsPlot2 <- res %>%
+      collect_metrics() %>%
+      ggplot(aes(x=mtry, y=mean, col=as.factor(min_n)))+
+      geom_point()+
+      geom_line()
+    
+    final_model <- res %>% select_best(metric = "roc_auc")
+    
+    final_fit <- finalize_workflow(wkflow, final_model) %>%
+      parsnip::fit(data = preprocessResult$train) 
+    
+    importancePlot <- final_fit %>% extract_fit_parsnip()%>%
+      vip(geom='point',aes = list(colour="black", fill='lightblue', alpha=0.7))+
+      theme_classic()
+    
+    importanceDf <- final_fit %>% extract_fit_parsnip() %>%
+      vi() %>% as.data.frame()
+    
+    aug <- augment(final_fit, preprocessResult$test)
+    aug_m <- aug %>% mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
+    
+    roc_auc <- roc_auc(aug, significant, .pred_TRUE)
+    two_classCurve <- roc_curve(aug, truth = significant,
+                                .pred_TRUE)
+    rocCurve <- autoplot(two_classCurve)
+    
+    #dims <- c("5pca","10pca","50pca","100pca","150pca","200pca")
+    result <- list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+                   "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m)
+    # saveRDS(result, sprintf("%sGTEXtestingMLRes_%s.rds",algorithm, (ncol(preprocessResult$train)-1)))
+    
+    return(list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+                "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m))
+    
+  }
+  else if(algorithm == "PCA"){
+    model_RF <- rand_forest(trees = 500, mtry = sqrt(ncol(preprocessResult$train)), min_n = tune(), 
+                            mode = "classification") %>% set_engine("randomForest", importance = TRUE)
+    set.seed(234)
+    
+    folds <- vfold_cv(data = preprocessResult$train, v=3)
+    limit <- (ncol(preprocessResult$train))-1
+    tuningGrid <- grid_regular(
+      #trees(range = c(1,2000)),
+      #mtry(range = c(1,limit)),
+      min_n(range = c(1,limit)),
+      levels = limit
+    )
+    #build workflow
+    wkflow <- workflows::workflow() %>%
+      add_recipe(preprocessResult$recipe) %>%
+      add_model(model_RF)
+    #tune model
+    #plan(multisession, workers = 16)
+    res <- tune_grid(
+      wkflow,
+      resamples = folds,
+      grid = tuningGrid,
+      control = control_grid(save_pred = TRUE),
+      metrics = metric_set(roc_auc),
+    )
+    resDf <- res %>% collect_metrics() %>%
+      mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
+    paramsPlot <- autoplot(res)
+    paramsPlot2 <- res %>%
+      collect_metrics() %>%
+      ggplot(aes(x=mtry, y=mean, col=as.factor(min_n)))+
+      geom_point()+
+      geom_line()
+    
+    final_model <- res %>% select_best(metric = "roc_auc")
+    
+    final_fit <- finalize_workflow(wkflow, final_model) %>%
+      parsnip::fit(data = preprocessResult$train) 
+    
+    importancePlot <- final_fit %>% extract_fit_parsnip()%>%
+      vip(geom='point',aes = list(colour="black", fill='lightblue', alpha=0.7))+
+      theme_classic()
+    
+    importanceDf <- final_fit %>% extract_fit_parsnip() %>%
+      vi() %>% as.data.frame()
+    
+    aug <- augment(final_fit, preprocessResult$test)
+    aug_m <- aug %>% mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
+    
+    roc_auc <- roc_auc(aug, significant, .pred_TRUE)
+    two_classCurve <- roc_curve(aug, truth = significant,
+                                .pred_TRUE)
+    rocCurve <- autoplot(two_classCurve)
+    
+    #dims <- c("5pca","10pca","50pca","100pca","150pca","200pca")
+    result <- list("workflow" = wkflow, "res" = res, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+                   "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m)
+    #saveRDS(result, sprintf("processed/%sGTEXtestingMLRes_%s.rds",algorithm, ncol(preprocessResult$train)-1))
+    
+    return(list("workflow" = wkflow, "res" = res, "resDF"=resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+                "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m))
+  }
+  
+}
