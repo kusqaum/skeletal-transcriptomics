@@ -205,21 +205,25 @@ nmfDataMlResList <- lapply(nmfProcessed, FUN=randForest_fctn, algorithm="NMF")
 # saveRDS(mlResList, "processed/test_03.rds")
 # saveRDS(nmfDataMlResList, "processed/tempMLResults.rds")
 # pcaProcessed[[1]]
-xgboost_fctn <- function(preprocessResult) {
-  model_xgb <- boost_tree(trees = tune(), mtry=tune(), min_n = tune(), learn_rate = tune(),
+xgboost_fctn <- function(preprocessResult, algorithm) {
+  model_xgb <- boost_tree(trees = 1000, tree_depth = tune(), mtry=tune(), min_n = tune(), learn_rate = tune(),
+                          sample_size = tune(),
                           loss_reduction = tune(), mode = "classification") %>%
     set_engine("xgboost")
+  set.seed(234)
   folds <- vfold_cv(data = preprocessResult$train, v=5, repeats = 5)
-  limit <- ncol(preprocessResult$train)-1
   
-  xgbGrid <- grid_regular(
-    trees(range = c(1,2000)),
-    mtry(range = c(1,limit)),
-    min_n(range = c(1,limit)),
-    learn_rate(range = c(-10,-1)),
-    loss_reduction(range = c(-10,1.5)),
-    levels = limit
+  #use grid latin ihiypercube because this covers
+  xgbGrid <- grid_latin_hypercube(
+    tree_depth(),
+    min_n(),
+    learn_rate(),
+    loss_reduction(),
+    sample_size = sample_prop(),
+    finalize(mtry(), preprocessResult$train),
+    size = 100
   )
+  
   wkflow<- workflow() %>%
     add_recipe(preprocessResult$recipe) %>%
     add_model(model_xgb)
@@ -230,9 +234,13 @@ xgboost_fctn <- function(preprocessResult) {
     grid = xgbGrid,
     control = control_grid(save_pred = TRUE),
     metrics = metric_set(roc_auc)
+    
   )
   
+  metrics_xgb <- res %>% collect_metrics()
   final_model <- res %>% select_best(metric = "roc_auc")
+  
+  finalised_wf <- finalize_workflow(wkflow, final_model)
   
   final_fit <- finalize_workflow(wkflow, final_model) %>%
     fit(data = preprocessResult$train) 
@@ -244,10 +252,9 @@ xgboost_fctn <- function(preprocessResult) {
   two_classCurve <- roc_curve(aug, truth = significant,
                               .pred_FALSE)
   rocCurve <- autoplot(two_classCurve)
-  
+
+  return(list())
 }
-plan(multisession, workers = 10)
-resulting_xgb <- xgboost_fctn(split_score100dim)
 
  
 #-----------------------------------------------------------------------------------------------------------------------
