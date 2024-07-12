@@ -28,6 +28,7 @@ split_processingData_fctn <- function(data, proportion){
   testData <- testing(dataSplit)
   #create recipe
   rec <-recipe(significant~., data = trainData) %>%
+    #step_adasyn(over_ratio = 1, seed = 456) %>%
     step_downsample(significant, under_ratio = 1, seed = 456)
   #return(list(rec, trainData, testData))
   return(list("train" = as.data.frame(trainData), "test"=as.data.frame(testData), "recipe"=rec))
@@ -37,24 +38,6 @@ print("creating preprocessing recipe")
 # nmfProcessed <- lapply(X=nmfDfs, FUN = split_processingData_fctn, proportion =0.8)
 nmfProcessed <- map(.x = nmfDfs, .f = split_processingData_fctn, proportion=0.8)
 # pcaProcessed <- map(.x = pcaDfs, .f = split_processingData_fctn, proportion = 0.8)
-#temporart<- lapply(X=temport,FUN = split_processingData_fctn, proportion=.8)
-
-#get training data
-# trainData <- lapply(processedData, function(w){
-#   w$train
-# })
-# 
-#get testing data
-# testData <- lapply(processedData, function(w){
-#   w$test
-# })
-# 
-# #get the recipe
-# theRecipe <- lapply(processedData, function(w){
-#   w$recipe
-# })
-
-# list_fold <- list()
 
 randForest_fctn <- function(preprocessResult, algorithm){
   if(algorithm == "NMF"){
@@ -83,6 +66,20 @@ randForest_fctn <- function(preprocessResult, algorithm){
       control = control_grid(save_pred = TRUE),
       metrics = metric_set(roc_auc),
     )
+    #make a df for correct R
+    df <- data.frame(k = res$id2, r = res$id)
+    metrics <- res$.metrics
+    getBestMet <- function(metr){
+      bestRows <- metr[which.max(metr$.estimate),]
+      return(bestRows)
+    }
+    bestMet <- map(.x = metrics, .f = getBestMet)
+    allbestMet <- do.call("rbind", bestMet)
+    df$values <- allbestMet$.estimate
+    df <- df%>% mutate(model = "RF")
+    df$k <- as.integer(substr(df$k, nchar(df$k), nchar(df$k)))
+    df$r <- as.integer(substr(df$r, nchar(df$r), nchar(df$r)))
+    
     resDf <- res %>% collect_metrics() %>%
       mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
     paramsPlot <- autoplot(res)
@@ -119,7 +116,7 @@ randForest_fctn <- function(preprocessResult, algorithm){
     
     return(list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
                 "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m, "algorithm" = algorithm,
-                "dim" = dimension))
+                "dim" = dimension, "dfForCorrectR" = df))
     
   }
   else if(algorithm == "PCA"){
@@ -148,6 +145,23 @@ randForest_fctn <- function(preprocessResult, algorithm){
       control = control_grid(save_pred = TRUE),
       metrics = metric_set(roc_auc),
     )
+    
+    
+    
+    df <- data.frame(k = res$id2, r = res$id)
+    metrics <- res$.metrics
+    getBestMet <- function(metr){
+      bestRows <- metr[which.max(metr$.estimate),]
+      return(bestRows)
+    }
+    bestMet <- map(.x = metrics, .f = getBestMet)
+    allbestMet <- do.call("rbind", bestMet)
+    df$values <- allbestMet$.estimate
+    df <- df%>% mutate(model = "RF")
+    df$k <- as.integer(substr(df$k, nchar(df$k), nchar(df$k)))
+    df$r <- as.integer(substr(df$r, nchar(df$r), nchar(df$r)))
+    
+    rf_metrics <- res%>% collect_metrics()
     resDf <- res %>% collect_metrics() %>%
       mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
     paramsPlot <- autoplot(res)
@@ -182,7 +196,7 @@ randForest_fctn <- function(preprocessResult, algorithm){
                    "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m)
     saveRDS(result, sprintf("processed/%sMLRes_%s.rds",algorithm, ncol(preprocessResult$train)-1))
     
-    return(list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+    return(list("workflow" = wkflow, "res" = res, "dfForCorrectR" = df,"resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
                 "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m, "algorithm" = algorithm,
                 "dim" = dimension))
   }
@@ -206,6 +220,7 @@ nmfDataMlResList <- lapply(nmfProcessed, FUN=randForest_fctn, algorithm="NMF")
 # saveRDS(nmfDataMlResList, "processed/tempMLResults.rds")
 # pcaProcessed[[1]]
 xgboost_fctn <- function(preprocessResult, algorithm) {
+  if(algorithm == "NMF"){
   model_xgb <- boost_tree(trees = 1000, tree_depth = tune(), mtry=tune(), min_n = tune(), learn_rate = tune(),
                           sample_size = tune(),
                           loss_reduction = tune(), mode = "classification") %>%
@@ -234,8 +249,9 @@ xgboost_fctn <- function(preprocessResult, algorithm) {
     grid = xgbGrid,
     control = control_grid(save_pred = TRUE),
     metrics = metric_set(roc_auc)
-    
   )
+  
+  crossValMetrics <- do.call("rbind", res$.metrics)
   
   metrics_xgb <- res %>% collect_metrics()
   final_model <- res %>% select_best(metric = "roc_auc")
@@ -253,10 +269,20 @@ xgboost_fctn <- function(preprocessResult, algorithm) {
                               .pred_FALSE)
   rocCurve <- autoplot(two_classCurve)
 
-  return(list())
+  return(list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, 
+              "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
+              "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve,"confMat" = confMat, 
+              "aug"= aug_m,"confMat"= confMat, "algorithm"=algorithm, "dim" = dimension))
+  }
 }
 
- 
+
+nmf150_reduced <- nmfDataframes[[5]] %>% select(V110, V128, V40, V73, V86, significant)
+splitnmf150 <- split_processingData_fctn(nmf150_reduced, .8)
+plan(multisession, workers=30)
+reduceddfMLRES <- justToTestRF(splitnmf150, "NMF")
+plan(multisession, workers=availableCores())
+xgbRES <- justtotestXGB(split10dim, "NMF")
 #-----------------------------------------------------------------------------------------------------------------------
 
 # ######this all for 04_modelInterpretation script#####
