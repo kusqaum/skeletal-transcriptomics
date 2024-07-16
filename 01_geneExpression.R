@@ -3,14 +3,14 @@ library(tidyverse)
 library(plyr)
 
 
-testfile <- readRDS("raw/rnaSeq/GSE99662/GSE99662_txi.RDS")
-testfile2 <- readRDS("raw/rnaSeq/GSE162691/GSE162691_txi.RDS")
+# testfile <- readRDS("raw/rnaSeq/GSE99662/GSE99662_txi.RDS")
+# testfile2 <- readRDS("raw/rnaSeq/GSE162691/GSE162691_txi.RDS")
 
 
-test_abundance <- testfile$abundance
-test_abundance2 <- testfile2$abundance
-head(testfile$abundance)
-testfile[["abundance"]]
+# test_abundance <- testfile$abundance
+# test_abundance2 <- testfile2$abundance
+# head(testfile$abundance)
+# testfile[["abundance"]]
 
 
 #we have a vector of all the files
@@ -166,20 +166,20 @@ rownames(human_mouseDf) <- human_mouseDf$Row.names; human_mouseDf$Row.names <- N
 #read in file created outside this script to create a df of just human protein coding genes
 #from biomart
 human_coding <- read.table("processed/human_coding_genes.txt", header = T)
-humanDf$ensembl_gene_id <- rownames(humanDf)
+# humanDf$ensembl_gene_id <- rownames(humanDf) # uncomment this if you want to use just human gene expression data
 human_mouseDf$ensembl_gene_id <- row.names(human_mouseDf)
 
 # then merge with large humanDf so just retaining IDs common to both. remove the cols made for 
 #merging
 proteinCoding <- merge(human_coding, human_mouseDf, by ="ensembl_gene_id"); human_mouseDf$ensembl_gene_id <- NULL
 #so now we only have 16984 genes
-humanPC <- merge(human_coding, humanDf, by = "ensembl_gene_id"); humanDf$ensembl_gene_id <- NULL#; humanPC$ensembl_gene_id <- NULL
-rownames(humanPC)<- humanPC$ensembl_gene_id
+#humanPC <- merge(human_coding, humanDf, by = "ensembl_gene_id"); humanDf$ensembl_gene_id <- NULL#; humanPC$ensembl_gene_id <- NULL
+#rownames(humanPC)<- humanPC$ensembl_gene_id # uncomment this line and linei above if you want to use human dfs only
 rownames(proteinCoding)<- proteinCoding$ensembl_gene_id
 forDimensionReduction <- proteinCoding
 forDimensionReduction$ensembl_gene_id <- NULL
 saveRDS(forDimensionReduction, "processed/geneExpressForDimRed.rds")
-write.table(humanPC, "processed/HumanCoding_rnaSeq.txt", row.names = F, sep = "\t", quote = F) # remember that one of the
+#write.table(humanPC, "processed/HumanCoding_rnaSeq.txt", row.names = F, sep = "\t", quote = F) # remember that one of the
 #columns is called ensembl_gene_id for later
 
 #so just keeping the protein coding genes from the human dataframe.leaves me with a total of 
@@ -231,26 +231,27 @@ write.table(impc_mouse_ensembl, "processed/list_impc_ids.txt", row.names = F, se
 #need to now map the mouse ensembl IDs to human IDs...
 # so now I need to gather the non mapped impc genes:
 
-impcHomology <- read.table("processed/allIMPC_homology.txt", header = T)
+# impcHomology <- read.table("processed/allIMPC_homology.txt", header = T)
+impcHomology <- read.table("processed/impcHomologyAllLatest.txt", header = T)
 
-#only managed to get mappings for 8015 genes out of 8474. 459 genes lost :/
+#only managed to get mappings for 8003 genes out of 8474. 472 genes lost 
 
 matchingIMPC <- match(impcGenes2$ID, impcHomology[,1])
 ensemblHuman <- impcHomology[matchingIMPC, 2]
 impcGenes2$ensembl_gene_id <- ensemblHuman
 sum(is.na(impcGenes2$ensembl_gene_id))
-#455 
+#468 
 #i have checked some of these and I don't think there is a mapping for them. So I will have to leave them out :
 na_2 <- impcGenes2 %>% filter(is.na(ensembl_gene_id))
 
 
 final_impcGenes <- impcGenes2 %>% select(ensembl_gene_id, significant) %>% filter(!is.na(ensembl_gene_id))
-sum(final_impcGenes$significant == "TRUE")#1324
-sum(final_impcGenes$significant == "FALSE")#6690
+sum(final_impcGenes$significant == "TRUE")#1320
+sum(final_impcGenes$significant == "FALSE")#6681
 
 
 #then can merge this df with humanPC by "ensemblgene_id"
-dataWithLabels <- merge(humanPC, final_impcGenes, by = "ensembl_gene_id")
+# dataWithLabels <- merge(humanPC, final_impcGenes, by = "ensembl_gene_id") # uncomment if you are just working with human df
 #THE GE df has still got the rownames as a column called ensembl_gene_id. so will merge using that
 mouseHumanWithLabels <- merge(proteinCoding, final_impcGenes, by="ensembl_gene_id")
 #now change ensembl IDs to rownames:
@@ -260,8 +261,8 @@ write.table(dataWithLabels, "processed/geneExpressionDataWithLabels.txt", row.na
 saveRDS(mouseHumanWithLabels, "processed/mouseHumanWithLabels.rds")
 
 ##########import new impc phenotypes######
-#just looking at a more specific phenotype of genes assoiated with bone mineral density/content
-impcGenes_new <- read.table("processed/mineralGenes.txt", header = T, sep = "\t")
+#just looking at a mortality
+impcGenes_new <- read.table("processed/mortalityPhenotype.txt", header = T, sep = "\t")
 str(impcGenes_new$significant)
 impcGenes_new$significant <- as.logical(impcGenes_new$significant)
 str(impcGenes_new$significant)
@@ -277,14 +278,18 @@ length(which(impcGenesNew2=="FALSE"))
 
 # now match the impc gene symbols to gene symbols from the mgi database
 head(hgncAllianceHomology)
-match_mineral_symb <- match(impcGenesNew2$marker_symbol, hgncAllianceHomology[,1])
-mouse_ensemb_id_matching <- hgncAllianceHomology[match_mineral_symb, 2]
+match_symb <- match(impcGenesNew2$marker_symbol, hgncAllianceHomology[,1])
+mouse_ensemb_id_matching <- hgncAllianceHomology[match_symb, 2]
 #add on the mouse ensembl ids as extra column now
 impcGenesNew2$ensembl_id <- mouse_ensemb_id_matching
-
+####'
+impcGenesNewDF <- data.frame(mouseEnsembl = impcGenesNew2$ensembl_id)
+write.table(impcGenesNewDF, "processed/mortalityPhen.txt", row.names = F, sep = "\t", quote = F)
+####
 #now map mouse ensembl to human ensembl:
-match_impc <- match(impcGenesNew2$ensembl_id, impcHomology$Mouse_ensembl)
-ensembl_corres <- impcHomology[match_impc, 2]
+mortalityPhenotyepHomology <- read.table("processed/mouseMortalityGenesHomology.txt", header = T, sep = "\t")
+match_impc <- match(impcGenesNew2$ensembl_id, mortalityPhenotyepHomology$Mouse_ensembl)
+ensembl_corres <- mortalityPhenotyepHomology[match_impc, 2]
 impcGenesNew2$ensembl_gene_id <- ensembl_corres
 head(impcGenesNew2)
 
@@ -295,4 +300,22 @@ head(newImpcGenes)
 rownames(newImpcGenes)<- newImpcGenes$ensembl_gene_id; newImpcGenes$ensembl_gene_id<-NULL
 head(newImpcGenes)
 newImpcGenes$significant <- as.factor(newImpcGenes$significant)
-write.table("processed/newImpcGenes.txt", sep = "\t", quote = F)
+write.table(newImpcGenes ,"processed/newImpcGenes.txt", sep = "\t", quote = F)
+
+
+
+
+# #####impcGenes just skeleton morphology#####
+# skelMorph <- read.table("processed/abnormSkelMorph.txt", sep = "\t", header = T)
+# head(skelMorph)
+# matchMorphSymb <- match(skelMorph$marker_symbol, hgncAllianceHomology[,1])
+# matchMorph <- hgncAllianceHomology[matchMorphSymb, 2]
+# skelMorph$mouse_ensemb <- matchMorph
+# head(skelMorph)
+# #now match the mouse ensembl to human ensembl
+# matchPos <- match(skelMorph$mouse_ensemb, impcHomology[,1])
+# humGne <- impcHomology[matchPos, 2]
+# skelMorph$ensembl_gene_id <- humGne
+# head(skelMorph)
+# skelMorph <- skelMorph %>% filter(!is.na(ensembl_gene_id))
+# skelMorphLabels <- data.frame(row.names = skelMorph$ensembl_gene_id, significant = skelMorph$significant)
