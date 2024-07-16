@@ -54,21 +54,24 @@ saveRDS(fullGeneExpressforPCA, "processed/fullGeneExpressForPCA.rds")
 #nmfSeed()
 ####perform NMF####
 #determine the sequence
-ranks = c(5,10,50,100,150,200)
-#noRanks <- seq(2,10,2)
+# ranks = c(5,10,50,100,150,200,300,400,500)
+# moreRanks <- c(5,10,12,14,16,18,20,25,30, 35,40, 45,50, 60, 70, 80, 90)
+tuneRanks <- c(5,10,12,16,20,25,30,40,50,60,80,90,100,150)
+# 
 #and the number of ranks
 noofruns <- 2
 #set seed as well
 set.seed(1234)
-Ranks <- c(5,10)
 
 ##generate shuffled data
-shuffledNMF <- randomize(fullGeneExpressforNMF); row.names(shuffledNMF)<- row.names(fullGeneExpressforNMF)
+# shuffledNMF <- randomize(fullGeneExpressforNMF); row.names(shuffledNMF)<- row.names(fullGeneExpressforNMF)
 # library(future)
 # plan(multisession, workers = availableCores())
-
+print("running NMF")
 res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
 saveRDS(res.multiRank, "processed/res.multiRank.rds")
+res.multiRankLarge <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
+saveRDS(res.multiRankLarge, "processed/res.multiRankLarge")
 # res.multiRank <- nmf(as.data.frame(shuffled)[1:10], rank = c(5,10), nrun=noofruns, seed = 123456)
 #^ gives the same result for t test
 
@@ -155,9 +158,10 @@ shuffPCsdim50_L <- merge(shuffPCsdim50, labelsFullDf, by=0)
 rownames(shuffPCsdim50_L)<- shuffPCsdim50_L$Row.names ;shuffPCsdim50_L$Row.names<- NULL
 head(shuffPCsdim50_L)
 
-#split and create rec
-shuff_Split <- split_processingData_fctn(shuffPCsdim50_L, proportion = 0.8)
-shuff_MLRes <- justToTestRF(shuff_Split, algorithm = "PCA")
+#split and create rec- this was just temporary so I need to run it in full in the model training where 
+#the functions for machine learning are
+# shuff_Split <- split_processingData_fctn(shuffPCsdim50_L, proportion = 0.8)
+# shuff_MLRes <- justToTestRF(shuff_Split, algorithm = "PCA")
 
 removeLabelsFctn <- function(dataWithLabels){
   dataWithLabels[,ncol(dataWithLabels)] <- NULL
@@ -200,9 +204,21 @@ for (i in 1:length(ranks)) {
     #pcList2<- append(pcList2, list(dime2))
   }
 }
+
+#do some more in depth tuning
+for (j in 1:length(tuneRanks)) {
+  #create empty lists
+  pcList_tuned <- list()
+  #loop through each of the dimensions
+  for (m in (tuneRanks)) {
+    dime2<- pcsLabelled[,1:m]
+    pcList_tuned<- append(pcList_tuned, list(dime2))
+  }
+}
 # pcList is also for PCA machine learning-
 
 ##
+
 
 ####changes for PCA t-testing here####-update made a new fctn
 #make a function to take in the list of dfs created above
@@ -309,9 +325,7 @@ pcaDimPValues <- lapply(X = pcList, FUN = performTtestFctn, labels = labelsFullD
 nmfMinPvals <- lapply(X=unlabelledNMFgenes, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="NMF")
 t.test(labelledGenesNMFRes[[5]][,4] ~ labelledGenesNMFRes[[5]][,ncol(labelledGenesNMFRes[[5]])])$p.value
 ncol(labelledGenesNMFRes[[1]])
-head(pcList[[1]])
-pl <- pcList[[1]][,2]
-then <- data.frame(merge(pl, labelsFullDf$significant, by=0))
+
 
 
 # genesNMFres <- lapply(labelledGenesNMFRes,removeLabelsFctn)
@@ -381,10 +395,16 @@ ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), size=Algorithm
 
 
 labelledGenesPCARes <- lapply(pcList, FUN = getLabelledGenesFctn, labelsFullDf)
+labelledGenesPCARes_tuned <- lapply(pcList_tuned,  FUN = getLabelledGenesFctn, labelsFullDf)
 # labelledGenesNMFRes
 
-saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
-saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
+# read.table("pro") - need to read in the new labels
+# differentlyLabelledPCA <- map(.x = pcList, .f = getLabelledGenesFctn, newImpcGenes)
+
+
+#saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
+saveRDS(labelledGenesPCARes_tuned, "processed/pcaDataframes_tuned.rds")
+#saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
 
 ##save result for model training
 # saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
@@ -400,170 +420,12 @@ noLabels <- row.names(fullGeneExpressN)[!row.names(fullGeneExpressN) %in%
 unlabelled <- fullGeneExpressN[noLabels,]
 saveRDS(unlabelled, "processed/unlabelledGenes.rds")
 
-
+pc500 <- pcsLabelled[,1:500]
+pc500_Labelled <- merge(pc500, labelsFullDf, by=0);pc500_Labelled$Row.names<-NULL
+# if you are going to call in the functions either do it in the script where the functions are or write out 
+#the functions above
+# split_pc500 <- split_processingData_fctn(pc500_Labelled, 0.8)
+# pca500dimMLres <- justToTestRF(split_pc500, algorithm="PCA")
 
 
 #--------------------------------------------------------------------------
-#temp for go terms potentially
-# just extract pc50 for now:
-pc50 <- pcList[[3]]
-pc50_1<-pc50
-pc50_1$significant <- labelsFullDf$significant
-goTerms <- goTerms %>% distinct(ensembl_gene_id, .keep_all = T)
-rownames(goTerms)<- goTerms$ensembl_gene_id
-pc50go <- merge(pc50, goTerms, by=0)
-rownames(pc50go) <- pc50go$Row.names; pc50go$Row.names <- NULL; pc50go$ensembl_gene_id<- NULL
-
-pc50go$significant <- labelsFullDf$significant
-pc50go2 <- pc50go%>% filter(go_id!="")
-
-GOsplit_processingData_fctn <- function(data, proportion){
-  set.seed(123)
-  dataSplit <- initial_split(data, prop = proportion)
-  trainData <- training(dataSplit)
-  testData <- testing(dataSplit)
-  #create recipe
-  rec <-recipe(significant~., data = trainData) %>%
-    step_downsample(significant, under_ratio = 1, seed = 456) %>%
-    step_dummy(go_id)
-  #return(list(rec, trainData, testData))
-  return(list("train" = as.data.frame(trainData), "test"=as.data.frame(testData), "recipe"=rec))
-}
-
-split <- GOsplit_processingData_fctn(pc50go2, .8)
-split2<- split_processingData_fctn(pc50_1, 0.8)
-plan(multisession, workers=availableCores())
-resultMLWithGO<- justToTestRF(split, algorithm="PCA")
-
-###
-#function:
-justToTestRF <- function(preprocessResult, algorithm){
-  if(algorithm == "NMF"){
-    model_RF <- rand_forest(trees = 500, mtry = sqrt(ncol(preprocessResult$train)), min_n = tune(), 
-                            mode = "classification") %>% set_engine("randomForest", importance = TRUE)
-    set.seed(234)
-    
-    folds <- vfold_cv(data = preprocessResult$train, v=3)
-    limit <- (ncol(preprocessResult$train))-1
-    tuningGrid <- grid_regular(
-      #trees(range = c(1,2000)),
-      #mtry(range = c(1,limit)),
-      min_n(range = c(1,limit)),
-      levels = limit
-    )
-    #build workflow
-    wkflow <- workflow() %>%
-      add_recipe(preprocessResult$recipe) %>%
-      add_model(model_RF)
-    #tune model
-    #plan(multisession, workers = 16)
-    res <- tune_grid(
-      wkflow,
-      resamples = folds,
-      grid = tuningGrid,
-      control = control_grid(save_pred = TRUE),
-      metrics = metric_set(roc_auc),
-    )
-    resDf <- res %>% collect_metrics() %>%
-      mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
-    paramsPlot <- autoplot(res)
-    paramsPlot2 <- res %>%
-      collect_metrics() %>%
-      ggplot(aes(x=mtry, y=mean, col=as.factor(min_n)))+
-      geom_point()+
-      geom_line()
-    
-    final_model <- res %>% select_best(metric = "roc_auc")
-    
-    final_fit <- finalize_workflow(wkflow, final_model) %>%
-      parsnip::fit(data = preprocessResult$train) 
-    
-    importancePlot <- final_fit %>% extract_fit_parsnip()%>%
-      vip(geom='point',aes = list(colour="black", fill='lightblue', alpha=0.7))+
-      theme_classic()
-    
-    importanceDf <- final_fit %>% extract_fit_parsnip() %>%
-      vi() %>% as.data.frame()
-    
-    aug <- augment(final_fit, preprocessResult$test)
-    aug_m <- aug %>% mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
-    
-    roc_auc <- roc_auc(aug, significant, .pred_TRUE)
-    two_classCurve <- roc_curve(aug, truth = significant,
-                                .pred_TRUE)
-    rocCurve <- autoplot(two_classCurve)
-    
-    #dims <- c("5pca","10pca","50pca","100pca","150pca","200pca")
-    result <- list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
-                   "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m)
-    # saveRDS(result, sprintf("%sGTEXtestingMLRes_%s.rds",algorithm, (ncol(preprocessResult$train)-1)))
-    
-    return(list("workflow" = wkflow, "res" = res, "resDf" = resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
-                "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m))
-    
-  }
-  else if(algorithm == "PCA"){
-    model_RF <- rand_forest(trees = 500, mtry = sqrt(ncol(preprocessResult$train)), min_n = tune(), 
-                            mode = "classification") %>% set_engine("randomForest", importance = TRUE)
-    set.seed(234)
-    
-    folds <- vfold_cv(data = preprocessResult$train, v=3)
-    limit <- (ncol(preprocessResult$train))-1
-    tuningGrid <- grid_regular(
-      #trees(range = c(1,2000)),
-      #mtry(range = c(1,limit)),
-      min_n(range = c(1,limit)),
-      levels = limit
-    )
-    #build workflow
-    wkflow <- workflows::workflow() %>%
-      add_recipe(preprocessResult$recipe) %>%
-      add_model(model_RF)
-    #tune model
-    #plan(multisession, workers = 16)
-    res <- tune_grid(
-      wkflow,
-      resamples = folds,
-      grid = tuningGrid,
-      control = control_grid(save_pred = TRUE),
-      metrics = metric_set(roc_auc),
-    )
-    resDf <- res %>% collect_metrics() %>%
-      mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
-    paramsPlot <- autoplot(res)
-    paramsPlot2 <- res %>%
-      collect_metrics() %>%
-      ggplot(aes(x=mtry, y=mean, col=as.factor(min_n)))+
-      geom_point()+
-      geom_line()
-    
-    final_model <- res %>% select_best(metric = "roc_auc")
-    
-    final_fit <- finalize_workflow(wkflow, final_model) %>%
-      parsnip::fit(data = preprocessResult$train) 
-    
-    importancePlot <- final_fit %>% extract_fit_parsnip()%>%
-      vip(geom='point',aes = list(colour="black", fill='lightblue', alpha=0.7))+
-      theme_classic()
-    
-    importanceDf <- final_fit %>% extract_fit_parsnip() %>%
-      vi() %>% as.data.frame()
-    
-    aug <- augment(final_fit, preprocessResult$test)
-    aug_m <- aug %>% mutate(dim = ncol(preprocessResult$train)-1, Algorithm = algorithm)
-    
-    roc_auc <- roc_auc(aug, significant, .pred_TRUE)
-    two_classCurve <- roc_curve(aug, truth = significant,
-                                .pred_TRUE)
-    rocCurve <- autoplot(two_classCurve)
-    
-    #dims <- c("5pca","10pca","50pca","100pca","150pca","200pca")
-    result <- list("workflow" = wkflow, "res" = res, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
-                   "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m)
-    #saveRDS(result, sprintf("processed/%sGTEXtestingMLRes_%s.rds",algorithm, ncol(preprocessResult$train)-1))
-    
-    return(list("workflow" = wkflow, "res" = res, "resDF"=resDf, "finalMod" = final_model, "tuningPlots" =paramsPlot, "importancePlot"=importancePlot, "importanceDf"=importanceDf,
-                "finalFit" = final_fit, "AUC"= roc_auc, "roc_curve" = rocCurve, "aug"= aug_m))
-  }
-  
-}
