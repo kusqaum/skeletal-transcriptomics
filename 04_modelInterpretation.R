@@ -8,6 +8,16 @@ library(org.Hs.eg.db)
 # read in also the list of different dimensions:
 # nmfDataframes <- readRDS("processed/nmfDataframes.rds")
 
+
+#read in random forest file names
+randForestfileNames <- list.files("processed", full.names = T, pattern = "RFResSV")
+randForestfileNames
+rfResList <- lapply(randForestfileNames, readRDS)
+
+# read in xgboost file names
+xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV")
+xgbResList <- lapply(xgboostFileNames, readRDS)
+
 #### get all the auc scores ####
 nmfDataMlResList <- list()
 nmfDataMlResList[[1]]<- NMFMLRes_5
