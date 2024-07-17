@@ -36,27 +36,24 @@ row.names(fullGeneExpressN)<- filtRows
 #we don't really care about colnames anyways
 fullGeneExpressforNMF <- as.data.frame(fullGeneExpressN)
 
-lowestValue <- abs(min(fullGeneExpressforNMF)) # there are no negative values now
+# lowestValue <- abs(min(fullGeneExpressforNMF)) # there are no negative values now
 
 #these are what will be used for NMF and PCA
-fullGeneExpressforNMF[1,1]+lowestValue
-fullGeneExpressforNMF <- fullGeneExpressforNMF+lowestValue
+#fullGeneExpressforNMF[1,1]+lowestValue
+#fullGeneExpressforNMF <- fullGeneExpressforNMF+lowestValue
 head(fullGeneExpressforNMF[1:5,1:5])
 fullGeneExpressforPCA <- as.data.frame(fullGeneExpressN)
 head(fullGeneExpressforPCA[1:5,1:5])
 saveRDS(fullGeneExpressforPCA, "processed/fullGeneExpressForPCA.rds")
-
+saveRDS(fullGeneExpressforNMF, "processed/fullGeneExpressForNMF.rds")
 # sum(smallGeneExpress2$significant == "TRUE")
 # sum(smallGeneExpress2$significant == "FALSE")
 #now we have 1300 and 6578 positive and negative genes
 
-
 #nmfSeed()
 ####perform NMF####
 #determine the sequence
-# ranks = c(5,10,50,100,150,200,300,400,500)
-# moreRanks <- c(5,10,12,14,16,18,20,25,30, 35,40, 45,50, 60, 70, 80, 90)
-tuneRanks <- c(5,10,12,16,20,25,30,40,50,60,80,90,100,150)
+ranks = c(5,10,50,100,150,200,500)
 # 
 #and the number of ranks
 noofruns <- 2
@@ -65,24 +62,13 @@ set.seed(1234)
 
 ##generate shuffled data
 # shuffledNMF <- randomize(fullGeneExpressforNMF); row.names(shuffledNMF)<- row.names(fullGeneExpressforNMF)
-# library(future)
-# plan(multisession, workers = availableCores())
 print("running NMF")
-res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
+# res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
 saveRDS(res.multiRank, "processed/res.multiRank.rds")
-res.multiRankLarge <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
-saveRDS(res.multiRankLarge, "processed/res.multiRankLarge")
-# res.multiRank <- nmf(as.data.frame(shuffled)[1:10], rank = c(5,10), nrun=noofruns, seed = 123456)
-#^ gives the same result for t test
-
-# res.test <- nmf(fullGeneExpressforNMF[1:10], rank = c(5,10), seed=123456)
-
-#nmf without logg transf
-#res.multiRank2 <- nmf(smallGeneExpress[,1:50], rank = noRanks, nrun=noofruns, seed = 123456)
 
 #look at performance measures of the factorisation
 summary(res.multiRank)
-consensusmap(res.multiRank, labCol = NA, labRow = 1)
+# consensusmap(res.multiRank, labCol = NA, labRow = 1)
 
 #res.multi.method <- nmf(smallGeneExpress[,1:50], 2, seed =123456, list("brunet","lee", "ns"), .options= "t")
 #compare(res.multi.method)
@@ -123,12 +109,11 @@ getLabelledGenesFctn <- function(matrixList, knownLabels){
   return(merged)
 }
 #this is for NMF machine learning -cool
-labelledGenesNMFRes <- lapply(Wmatrices, FUN=getLabelledGenesFctn, labelsFullDf)
+labelledGenesNMFRes <- map(.x = Wmatrices, .f = getLabelledGenesFctn, labelsFullDf)
 #dim to check merged correctly just in case
 dim(labelledGenesNMFRes[[1]])
 head(labelledGenesNMFRes[[1]])
 labelledGenesNMFResTest <- labelledGenesNMFRes
-s<- lapply(Wmatrices, FUN=getLabelledGenesFctn, labelsFullDf)
 
 
 ####perform PCA####
@@ -319,7 +304,7 @@ performTtestFctn = function(listRes, labels, algorithm){
 }
 
 # labelledGenesNMFRes <- lapply(basis_matrices)
-unlabelledNMFgenes <- lapply((labelledGenesNMFRes), removeLabelsFctn)
+unlabelledNMFgenes <- lapply(labelledGenesNMFRes, removeLabelsFctn)
 pcaDimPValues <- lapply(X = pcList, FUN = performTtestFctn, labels = labelsFullDf$significant, algorithm="PCA")
  # pcaDimPValues2 <- lapply(X=pcList2, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="PCA")
 nmfMinPvals <- lapply(X=unlabelledNMFgenes, FUN = performTtestFctn, labels = mouseHumanWithLabs$significant, algorithm="NMF")
@@ -403,8 +388,8 @@ labelledGenesPCARes_tuned <- lapply(pcList_tuned,  FUN = getLabelledGenesFctn, l
 
 
 #saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
-saveRDS(labelledGenesPCARes_tuned, "processed/pcaDataframes_tuned.rds")
-#saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
+#saveRDS(labelledGenesPCARes_tuned, "processed/pcaDataframes_tuned.rds")
+saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
 
 ##save result for model training
 # saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
