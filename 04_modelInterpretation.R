@@ -12,19 +12,41 @@ library(org.Hs.eg.db)
 #read in random forest file names
 randForestfileNames <- list.files("processed", full.names = T, pattern = "RFResSV")
 randForestfileNames
-rfResList <- lapply(randForestfileNames, readRDS)
+rfSVResList <- lapply(randForestfileNames, readRDS)
 
 # read in xgboost file names
 xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV")
 xgbResList <- lapply(xgboostFileNames, readRDS)
-
+#rfSVResList <- rfResList
 #### get all the auc scores ####
-nmfDataMlResList <- list()
-nmfDataMlResList[[1]]<- NMFMLRes_5
-nmfDataMlResList[[2]]<- NMFMLRes_10
-auc <-lapply(nmfDataMlResList, function(x){ # where the input is a list containing multiple ML results
+aucRF <-lapply(rfSVResList, function(x){ # where the input is a list containing multiple ML results
   x$AUC$.estimate
 })
+
+cvRFSV <- lapply(rfSVResList, function(x){
+  x$resDf
+})
+cvAll <- do.call("rbind", cvRFSV)
+ggplot(cvAll, aes(x= as.factor(dim), y = mean, fill=as.factor(dim))) +
+  geom_boxplot()
+
+
+predictionsAll <- lapply(rfSVResList, function(x){
+  x$aug
+})
+rfAllPredictions <- bind_rows(predictionsAll)
+rfAllPredictions %>% group_by(dim) %>%
+  roc_curve(truth = significant, .pred_FALSE) %>%
+  ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
+  geom_path(linewidth=0.7)+
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed")+
+  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
+        aspect.ratio = 1)+
+  theme_bw(base_size = 16) +
+  labs(colour='Dimension')
+  
+
+
 
 df_auc <- lapply(auc, function(x){
   df<- data.frame(auc_scores = x)
