@@ -1,8 +1,9 @@
 ######this all for 04_modelInterpretation script#####
 
 library(tidyverse)
-library(clusterProfiler)
-library(org.Hs.eg.db)
+library(correctR)
+# library(clusterProfiler)
+# library(org.Hs.eg.db)
 # need to read in results from last script
 # nmfRes <- readRDS("processed/tempMLResults.rds")
 # read in also the list of different dimensions:
@@ -10,195 +11,238 @@ library(org.Hs.eg.db)
 
 
 #read in random forest file names
-randForestfileNames <- list.files("processed", full.names = T, pattern = "RFResSV")
+randForestfileNames <- list.files("processed", full.names = T, pattern = "RFResSV_")
 randForestfileNames
-rfSVResList <- lapply(randForestfileNames, readRDS)
 
+nmfRfSVResList <- lapply(randForestfileNames, readRDS)
+nmfRfSVResList[[1]]$dim
+nmfRfSVResList[[2]]$dim
+nmfRfSVResList <- nmfRfSVResList[order(sapply(nmfRfSVResList, function(x) x$dim))]
+nmfRfSVResList[[2]]$dim
+#remove the 5 dimension one
+nmfRfSVResList[[1]] <- NULL
 # read in xgboost file names
 xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV")
 xgbResList <- lapply(xgboostFileNames, readRDS)
-#rfSVResList <- rfResList
-#### get all the auc scores ####
-aucRF <-lapply(rfSVResList, function(x){ # where the input is a list containing multiple ML results
-  x$AUC$.estimate
-})
 
-cvRFSV <- lapply(rfSVResList, function(x){
+
+
+cvRFSV <- lapply(nmfRfSVResList, function(x){
   x$resDf
 })
-cvAll <- do.call("rbind", cvRFSV)
-ggplot(cvAll, aes(x= as.factor(dim), y = mean, fill=as.factor(dim))) +
-  geom_boxplot()
+cvXGBsV <- lapply(xgbResList, function(x){
+  x$resDf
+})
+cvAll <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
+cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
+cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
+ggplot(cvRfandXGB, aes(x= as.factor(dim), y = mean, fill=model)) +
+  geom_boxplot()+
+  scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
+  labs(x="", y="AUC", fill= "Model") +
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
+  theme_classic(base_size = 18)+
+  scale_x_discrete(labels = c("10 dimensions", "50 dimensions", "100 dimensions",
+                              " 150 dimensions", "200 dimensions", "500 dimensions"),
+                   guide = guide_axis(angle = 15))
 
 
-predictionsAll <- lapply(rfSVResList, function(x){
+predictionsAll <- lapply(nmfRfSVResList, function(x){
   x$aug
 })
+
+predictionsXGB <- lapply(xgbResList, function(x){
+  x$aug
+})
+
 rfAllPredictions <- bind_rows(predictionsAll)
-rfAllPredictions %>% group_by(dim) %>%
+xgbAllPred <- bind_rows(predictionsXGB)
+everything <- bind_rows(rfAllPredictions, xgbAllPred)
+rocCurve <- function(predictions){
+  predictions %>% group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE) %>%
   ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_path(linewidth=0.7)+
-  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed")+
+  geom_path(linewidth=0.9)+
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
   theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
         aspect.ratio = 1)+
-  theme_bw(base_size = 16) +
-  labs(colour='Dimension')
+  theme_bw(base_size = 20) +
+  guides(colour = guide_legend(title = "Dimension"))+
+  scale_colour_manual(values = c("pink3", "tomato", "tan2", "purple4", "turquoise3", "darkgreen"))
+  } 
   
-
-
-
-df_auc <- lapply(auc, function(x){
+noNetworkROCcurveRF <- rocCurve(predictions = rfAllPredictions)
+noNetworkROCcurveRF +
+  facet_wrap(~"RF")
+ggsave("processed/nonetworkROCcurveRF.pdf", noNetworkROCcurveRF, width = 10, height = 8)
+rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
+  roc_curve(truth = significant, .pred_FALSE) %>%
+  ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
+  geom_path(linewidth=0.9)+
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
+        aspect.ratio = 1)+
+  theme_bw(base_size = 20) +
+  guides(colour = guide_legend(title = "Dimension"))+
+  scale_colour_manual(values = c("turquoise3", "darkgreen"))+
+  facet_wrap(~"XGB")
+  
+rocCurveXGB
+#### get all the auc scores ####
+aucRF <-lapply(nmfRfSVResList, function(x){ # where the input is a list containing multiple ML results
+  x$AUC$.estimate
+})
+df_auc <- lapply(aucRF, function(x){
   df<- data.frame(auc_scores = x)
 })
-View(df_auc)
+head(df_auc)
 # here just binding all the scores for each model
-#so instead of getting just the best AUC metric.. get the metrics for all models trained: and then plot boxplots of them
-t <- nmf50ml$res$.metrics
-auc_50 <- do.call("rbind", t)
-auc_50 <- auc_50 %>% mutate(dim = 50, Algorithm = "NMF")
-ggplot(auc_50, aes(x=as.factor(dim),y=.estimate, col = Algorithm))+
-  geom_boxplot()
-
 
 aucDf <- do.call("rbind", df_auc)
 head(aucDf)
-dimension <- data.frame(dimensions = c(5,10), Algorithm = "NMF")
+dims <- lapply(nmfRfSVResList, function(x){
+  x$dim
+})
+listDims <- unlist(dims)
+listDims
+dimension <- data.frame(dimensions = listDims, Algorithm = "NMF")
 resDf <- cbind(aucDf, dimension)
 head(resDf)
-pcaAucDf <- data.frame(auc_scores = c(0.5, 0.509), dimensions = c(5,10), Algorithm = 'PCA')
-bothAUC <- rbind(resDf, pcaAucDf)
-head(bothAUC)
-#then plotting - need to change this because usually for aucs, should plot all of it as a boxplot to show spread
-ggplot(bothAUC, aes(x=as.factor(dimensions), y=auc_scores, col=Algorithm))+
-  geom_point(size=4.5) +
-  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill=NA),
-        panel.background = element_blank(),
-        #strip.text = element_text(),
-        #legend.position = "none",
-        #legend.text = element_text("dimensionality"),
-        #legend.title = element_text("dimension"),
-        aspect.ratio = 1)+
-  scale_colour_manual(values=c("tan2", "tomato"))+
-  xlab(expression(italic(" k") * " dimensions"))+
-  ylab("AUC") +
-  guides(colour = guide_legend(title = "Algorithm"))+
-  theme_bw(base_size = 16)
-# facet_wrap(~Algorithm)
 
 #finding which dimension the model that gave the highest auc score was trained on
 posBestFit <- which.max(resDf$auc)
+posBestFit
 bestDimension <- resDf[which.max(resDf$auc),]$dimensions
-for (d in 1:length(nmfDataMlResList)){
+bestDimension
+datausedForML <- readRDS("processed/nmfDataframes.rds")
+datausedForML[[1]] <-NULL # need to get rid of 5 dimension since not using anymore
+for (d in 1:length(nmfRfSVResList)){
   #print(nmfRes[[d]])
-  if(ncol(labelledGenesNMFRes[[d]])-1 == bestDimension){#allnmfmatrix is a list containing all the nmf reduced matrices +labels
+  if(ncol(datausedForML[[d]])-1 == bestDimension){#allnmfmatrix is a list containing all the nmf reduced matrices +labels
     # print(allNmfMatrix[[d]])
-    bestDf <- as.data.frame(labelledGenesNMFRes[[d]])
+    bestDf <- as.data.frame(datausedForML[[d]])
   }
 }
+dim(bestDf)
 #find the final fit for that model
-bestFit <- nmfDataMlResList[[posBestFit]]$finalFit
+bestFit <- nmfRfSVResList[[posBestFit]]$finalFit
+rfCVdf_forCR <- nmfRfSVResList[[posBestFit]]$dfForCorrectR
+
+#need to also get xgb mod 500 dim
+for(e in 1:length(xgbResList)){
+  if (xgbResList[[e]]$dim == bestDimension){
+    dfxgb <- xgbResList[[e]]$dfForCorrectR
+  }
+}
+dfCR <-rbind(rfCVdf_forCR, dfxgb)
+testRes <- repkfold_ttest(dfCR, n1=80, n2=20, k = 5, r = 3)
+
 #lets look at the variable importance
-bestModVarImport <- nmfDataMlResList[[posBestFit]]$importanceDf
+bestModVarImport <- nmfRfSVResList[[posBestFit]]$importanceDf
+nmfRfSVResList[[posBestFit]]$importancePlot
+head(bestModVarImport)
+
 bestModVarImport <- bestModVarImport %>% 
   mutate(sign = case_when(Importance<0 ~"negative", TRUE~"positive"))
+head(bestModVarImport)
+dim(bestModVarImport)
+top5Feats <- bestModVarImport[1:5,]
+fiveVars <- top5Feats$Variable
 
 #subset for the ones that are positive sign
-impFeats <- bestModVarImport %>% filter(sign=="positive")
-#then extract the variables that contribute to model's predictions
-modelFeats <- impFeats$Variable
-#find those features 
-modelFeatsDf <- bestDf %>% dplyr::select(all_of(modelFeats))# these are gonna be input for GSEA 
-colnames(modelFeatsDf) <- sub('V', 'Feature', colnames(modelFeatsDf))
+# impFeats <- bestModVarImport %>% filter(sign=="positive")
+# head(impFeats)
+# dim(impFeats)
+# #then extract the variables that contribute to model's predictions
+# modelFeats <- impFeats$Variable
+# #find those features 
+# modelFeatsDf <- bestDf %>% dplyr::select(all_of(modelFeats))# these are gonna be input for GSEA 
+# colnames(modelFeatsDf) <- sub('V', 'Feature', colnames(modelFeatsDf))
+# head(modelFeatsDf)
+top5FeatsModeldf <- bestDf %>% dplyr::select(all_of(fiveVars))
+head(top5FeatsModeldf)
+colnames(top5FeatsModeldf)<- sub("V", "Feature", colnames(top5FeatsModeldf))
+head(top5FeatsModeldf)
 
+top5FeatsModeldf<- top5FeatsModeldf %>% 
+  dplyr::mutate(TotalWeight = rowSums(top5FeatsModeldf))
+# x <- as.data.frame(top5FeatsModeldf$sum)
 
-##
-# modelFeatsDf <- modelFeatsDf %>% dplyr::mutate(sum = rowSums(modelFeatsDf))
+#maybe put the top important feature in order???
+top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
+# 
+# #let's just focus on one feature:
+# firstFeature <- data.frame(top5FeatsModeldf[,1], row.names = rownames(top5FeatsModeldf))
+# # nameFeat <- colnames(top5FeatsModeldf)[1]
+# colnames(firstFeature)[1] <- colnames(top5FeatsModeldf)[1]
+# firstFeat <- firstFeature %>% dplyr::arrange(desc(Feature272)) 
+# ##
 library(gplots)
 ?heatmap.2()
 # heatmap(mat)
-mat <- as.matrix(modelFeatsDf)
+mat <- as.matrix(top5FeatsModeldf)
 library(future)
 library(gplots)
 
 plan(multisession, workers = availableCores())
-pheatmap::pheatmap(mat)
-hm <- heatmap.2(x = mat, 
-          col = RColorBrewer::brewer.pal(9, c("RdBu")), 
-          #col="bluered",
-          dendrogram = "none", 
-          Rowv = F, 
-          Colv = F,
-          tracecol = NA,
-          rowsep = 1:nrow(mat),
-          #colsep = 1:ncol(mat)-1,
-          trace = 'none')
+library(pheatmap)
+#pdf("processed/testFig.pdf", width = 10, height = 10)
+# just select the top 15 genes in the most important feature
+heatmap <- pheatmap::pheatmap(mat[1:15,], border_color = "white",
+                   cluster_rows = F, 
+                   cluster_cols = F, 
+                   )
+ggsave("processed/heatmap.pdf",heatmap, height = 5, width = 10)
+# hm <- heatmap.2(x = mat[1:15,], 
+#           col = RColorBrewer::brewer.pal(9, c("RdBu")), 
+#           #col="bluered",
+#           dendrogram = "none", 
+#           Rowv = F, 
+#           Colv = F,
+#           tracecol = NA,
+#           rowsep = 1:nrow(mat),
+#           #colsep = 1:ncol(mat)-1,
+#           trace = 'none')
+# hm
+
 # ggplot(modelFeatsDf, aes(x = , y= ))+geom_
 colnames <- paste0("Feature", 1:ncol(bestDf))
+unlabelledGenes <- readRDS("processed/unStudiedGenes.rds")
 unlabelledGenes$prediction <- predict(bestFit, unlabelledGenes)
-ggplot(bestModVarImport, aes(x=Variable, y=Importance, col = sign))+
-  geom_point(size=4)+
-  theme_bw(base_size = 18)+
-  theme(legend.position="none")+
-  xlab("")
+head(unlabelledGenes[,2312:2313])
+length(which(is.na(unlabelledGenes)))
+length(which(unlabelledGenes$prediction=="TRUE"))
+length(which(unlabelledGenes$prediction!= "TRUE"))
+
 
 # vip(bestModVarImport, geom = 'point', mapping=aes(colour = sign))
 ##
 
-# get importance
-
-getImportanceFctn <- function(mlResList, algorithm){
-  
-  impFeatResult <- mlResList$importanceDf
-  importanceDfs <- do.call("bind_rows",impFeatResult)
-  return(impFeatResult)
-}#)
-doCall <- do.call(bind_cols, resultingDf)
-
-resultingDf<- lapply(nmfDataMlResList, FUN = getImportanceFctn, algorithm = "NMF")
 
 ####clusterprofiler code####
 # enrichKEGG(gene = row.names(bestDf))
-geneList <- data.frame(geneID = row.names(modelFeatsDf), Weight = modelFeatsDf$V8)
-geneList_2<- as.data.frame(t(geneList))
-genes <- c(row.names(modelFeatsDf))
-weights <- as.vector(modelFeatsDf$V8)
-weights <- sort(weights,decreasing = T)
-weights <- as.vector(weights)
-names(weights) <- genes
-class(weights)
-#genelis <- as.vector(geneList)
-# class(genelis)
-# enr
-# enrichKEGG(gene = weights, 
-#            organism = "hsa", keyType = )
 
-gseGO <- gseGO(geneList = weights,
-               ont = "BP",
-               OrgDb = org.Hs.eg.db,
-               keyType = "ENSEMBL",
-               maxGSSize=2000,
-               eps=0,
-               #pAdjustMethod="BH"
-)
-gseGO@result%>%
-  ggplot(aes())
-p<- dotplot(gseGO)
-p$data %>% #filter(p.adjust<0.3)%>%
-  ggplot(aes(x=GeneRatio,y=forcats::fct_reorder(Description, GeneRatio)))+#, colour = p.adjust, size =Count))+
-  geom_segment(aes(xend=0, yend = Description))+
-  geom_point(aes(colour=p.adjust, size = Count))+
-  
-  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE))+
-  scale_size_continuous(range=c(1, 10)) +
-  #scale_color_gradientn(colours = c(pal))+
-  # scale_colour_gradientn(colours=c("coral", "tomato", "firebrick2", "firebrick3","slateblue4","plum4", "rosybrown", "plum3" ))+
-  theme_bw(base_size = 14)+
-  ylab("")
+getEachFeature_fctn <- function(dataframeOfFeats){
+  sing <- list()
+  for (j in 1:(ncol(dataframeOfFeats)-1)){ # minus 1 cause don't want last col
+    print(j)
+    sing[[j]] <- data.frame(dataframeOfFeats[,j],
+                            row.names = rownames(dataframeOfFeats))
+    colnames(sing[[j]]) <- colnames(dataframeOfFeats)[j]
+    sing[[j]] <- sing[[j]] %>% arrange(desc(colnames(sing[[j]])))
+    #sing[[j]]$Gene <- rownames(dataframeOfFeats)
+  }
+  return(sing)
+} 
+# every time I successfully do a for loop I feel 100 times smarter
+eachFeat <- getEachFeature_fctn(top5FeatsModeldf)
+saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause clusterprofiler 
+#not installing
 
-gseKEGG <- gseKEGG(geneList = weights,
-                   organism = 'hsa',
-)
+
+
+
+
 ##external validation part 3
 humanPhenotype <- read.delim("genes_for_HP_0000924", col.names = c("geneID", "geneSymbol"))
 externalDatabase <- read.delim("https://www.informatics.jax.org/downloads/reports/HMD_HumanPhenotype.rpt", header = F, 
