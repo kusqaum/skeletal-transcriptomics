@@ -1,7 +1,10 @@
 ######this all for 04_modelInterpretation script#####
 
 library(tidyverse)
+library(tidymodels)
 library(correctR)
+library(cowplot)
+library(pheatmap)
 # library(clusterProfiler)
 # library(org.Hs.eg.db)
 # need to read in results from last script
@@ -20,7 +23,10 @@ nmfRfSVResList[[2]]$dim
 nmfRfSVResList <- nmfRfSVResList[order(sapply(nmfRfSVResList, function(x) x$dim))]
 nmfRfSVResList[[2]]$dim
 #remove the 5 dimension one
-nmfRfSVResList[[1]] <- NULL
+
+nmfRfSVResList<- nmfRfSVResList[which(sapply(nmfRfSVResList, function(x) x$dim >5))]
+#be mode diverse
+#nmfRfSVResList <- nmfRfSVResList[which(sapply(nmfRfSVResList, '[[', 13 )>5)]
 # read in xgboost file names
 xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV")
 xgbResList <- lapply(xgboostFileNames, readRDS)
@@ -33,22 +39,23 @@ cvRFSV <- lapply(nmfRfSVResList, function(x){
 cvXGBsV <- lapply(xgbResList, function(x){
   x$resDf
 })
-cvAll <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
+cvAllrf <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
 cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
-cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
-ggplot(cvRfandXGB, aes(x= as.factor(dim), y = mean, fill=model)) +
+#cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
+ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
-  labs(x="", y="AUC", fill= "Model") +
+  labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
   theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
-  theme_classic(base_size = 18)+
-  scale_x_discrete(labels = c("10 dimensions", "50 dimensions", "100 dimensions",
-                              " 150 dimensions", "200 dimensions", "500 dimensions"),
-                   guide = guide_axis(angle = 15))
+  theme_cowplot(font_size = 18)
 
 
 predictionsAll <- lapply(nmfRfSVResList, function(x){
   x$aug
+})
+
+emp <- lapply(nmfRfSVResList, function(x){
+  list("pred" = x$aug, "AUC"= x$AUC$.estimate)
 })
 
 predictionsXGB <- lapply(xgbResList, function(x){
@@ -57,17 +64,21 @@ predictionsXGB <- lapply(xgbResList, function(x){
 
 rfAllPredictions <- bind_rows(predictionsAll)
 xgbAllPred <- bind_rows(predictionsXGB)
-everything <- bind_rows(rfAllPredictions, xgbAllPred)
-rocCurve <- function(predictions){
-  predictions %>% group_by(dim) %>%
+
+rfAllPredictions %>% 
+  group_by(dim) %>%
+# rocCurve <- function(predictions){
+  # predictions %>% group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE) %>%
   ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_path(linewidth=0.9)+
+  geom_path(linewidth=0.9, show.legend = F)+
   geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  geom_text(aes(x=0.25, y=0.70, label = 50))
   theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
-        aspect.ratio = 1)+
+        aspect.ratio = 1, legend.position = "none")+
   theme_bw(base_size = 20) +
-  guides(colour = guide_legend(title = "Dimension"))+
+  facet_wrap(~ dim) +
+  #guides(colour = guide_legend(title = "Dimension"))+
   scale_colour_manual(values = c("pink3", "tomato", "tan2", "purple4", "turquoise3", "darkgreen"))
   } 
   
@@ -163,13 +174,35 @@ top5FeatsModeldf <- bestDf %>% dplyr::select(all_of(fiveVars))
 head(top5FeatsModeldf)
 colnames(top5FeatsModeldf)<- sub("V", "Feature", colnames(top5FeatsModeldf))
 head(top5FeatsModeldf)
+dim(top5FeatsModeldf)
+labelsFullDf <- read.table("processed/labelsFullDf.txt", header = T, sep = "\t")
+str(labelsFullDf$significant)
+labelsFullDf$significant<- as.factor(labelsFullDf$significant)
+all(rownames(top5FeatsModeldf)%in% rownames(labelsFullDf))
 
-top5FeatsModeldf<- top5FeatsModeldf %>% 
-  dplyr::mutate(TotalWeight = rowSums(top5FeatsModeldf))
+all(rownames(top5FeatsModeldf)== rownames(labelsFullDf))
+#they're in order so can just do cbind
+top5FeatsModeldfLabelled <- cbind(top5FeatsModeldf, labelsFullDf)
+q1 <- list()
+
+for (c in 1:(ncol(top5FeatsModeldfLabelled)-1)) {
+  pl <- ggplot(top5FeatsModeldfLabelled)+ 
+         aes(y = top5FeatsModeldfLabelled[,c], x= significant)+
+    geom_boxplot()+
+    xlab("")+
+    theme_cowplot(font_size = 16)
+  print(pl)
+  q1 <- append(q1, pl)
+}
+ggplot(top5FeatsModeldfLabelled, aes(x=top5FeatsModeldfLabelled[,5], y=significant))+
+  geom_boxplot()
+
+# top5FeatsModeldf<- top5FeatsModeldf %>% 
+#   dplyr::mutate(TotalWeight = rowSums(top5FeatsModeldf))
 # x <- as.data.frame(top5FeatsModeldf$sum)
 
 #maybe put the top important feature in order???
-top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
+# top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
 # 
 # #let's just focus on one feature:
 # firstFeature <- data.frame(top5FeatsModeldf[,1], row.names = rownames(top5FeatsModeldf))
@@ -177,20 +210,16 @@ top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
 # colnames(firstFeature)[1] <- colnames(top5FeatsModeldf)[1]
 # firstFeat <- firstFeature %>% dplyr::arrange(desc(Feature272)) 
 # ##
-library(gplots)
-?heatmap.2()
-# heatmap(mat)
-mat <- as.matrix(top5FeatsModeldf)
-library(future)
-library(gplots)
 
-plan(multisession, workers = availableCores())
-library(pheatmap)
+mat <- as.matrix(top5FeatsModeldf)
+head(mat)
+mat <- apply(mat, 2, rank)
+head(mat)
 #pdf("processed/testFig.pdf", width = 10, height = 10)
 # just select the top 15 genes in the most important feature
-heatmap <- pheatmap::pheatmap(mat[1:15,], border_color = "white",
+heatmap <- pheatmap::pheatmap(mat, border_color = "white",
                    cluster_rows = F, 
-                   cluster_cols = F, 
+                   cluster_cols = F, show_rownames = F
                    )
 ggsave("processed/heatmap.pdf",heatmap, height = 5, width = 10)
 # hm <- heatmap.2(x = mat[1:15,], 
@@ -208,15 +237,16 @@ ggsave("processed/heatmap.pdf",heatmap, height = 5, width = 10)
 # ggplot(modelFeatsDf, aes(x = , y= ))+geom_
 colnames <- paste0("Feature", 1:ncol(bestDf))
 unlabelledGenes <- readRDS("processed/unStudiedGenes.rds")
-unlabelledGenes$prediction <- predict(bestFit, unlabelledGenes)
-head(unlabelledGenes[,2312:2313])
+head(unlabelledGenes[1:4,1:5])
+unlabelledGenesPred <- augment(bestFit, unlabelledGenes)
+# so because we are returned a tibble, when converting to df the rownames disappear
+# temp <- as.data.frame(unlabelledGenesPred); rownames(temp) <- rownames(unlabelledGenesPred)
+head(unlabelledGenesPred[,2312:2313])
+
+unlabelledGenesPreddf <- as.data.frame(unlabelledGenesPred); rownames(unlabelledGenesPreddf) <- rownames(unlabelledGenesPred)
 length(which(is.na(unlabelledGenes)))
-length(which(unlabelledGenes$prediction=="TRUE"))
-length(which(unlabelledGenes$prediction!= "TRUE"))
-
-
-# vip(bestModVarImport, geom = 'point', mapping=aes(colour = sign))
-##
+length(which(unlabelledGenes$.pred_class=="TRUE"))
+length(which(unlabelledGenes$.pred_class!= "TRUE"))
 
 
 ####clusterprofiler code####
@@ -234,7 +264,7 @@ getEachFeature_fctn <- function(dataframeOfFeats){
   }
   return(sing)
 } 
-# every time I successfully do a for loop I feel 100 times smarter
+
 eachFeat <- getEachFeature_fctn(top5FeatsModeldf)
 saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause clusterprofiler 
 #not installing
@@ -243,14 +273,42 @@ saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause cl
 
 
 
-##external validation part 3
-humanPhenotype <- read.delim("genes_for_HP_0000924", col.names = c("geneID", "geneSymbol"))
-externalDatabase <- read.delim("https://www.informatics.jax.org/downloads/reports/HMD_HumanPhenotype.rpt", header = F, 
-                               sep = "\t")
-externalDatabase$V6 <- NULL
-colnames(externalDatabase)<- c("humanMarkerSymbol", "humanEntrezGeneID", "mouseMarkerSymbol", "mgiMarkerID", "mammalianPhenotypeID")
-head(externalDatabase)
-#search for skeletal phenotype and 
-patterns <- c("MP:0005390", "MP:0005371")
+##external validation part 3 
+#- MGI
+head(unlabelledGenesPreddf[1:4,1:5])
+mgiGenes <- read.table("processed/annotatedMGIgenes.txt", header = T, sep = "\t")
+mgiGenes <- mgiGenes %>% distinct(ensembl_gene_id, .keep_all = T)
+str(mgiGenes$ensembl_gene_id)
 
-exDb <- externalDatabase %>% filter(grepl(paste(patterns, collapse = '|'), mammalianPhenotypeID))
+rownames(mgiGenes)<- mgiGenes$ensembl_gene_id ; mgiGenes$ensembl_gene_id<-NULL
+head(mgiGenes)
+mgiGenes$significant<- as.factor(mgiGenes$significant)
+head(unlabelledGenes[1:3,1:5])
+# let's just get the genes in both datasets
+
+head(unlabelledGenesPreddf[1:5,1:5])
+length(which(rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes)))
+# so 1001 of the mgi genes are known to be associated to a skeletal phenotype
+nrow(unlabelledGenesPreddf) - (length(which(rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes))))
+# and 8000 genes are unstudied
+#which are those genes then? that aren't in the mgi genes (i.e., unstudied)
+totallyUnstudied <- rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes)]
+class(totallyUnstudied)
+length(totallyUnstudied)
+unstudied <- data.frame(significant = rep(c("FALSE"), times = length(totallyUnstudied)), row.names = totallyUnstudied)
+head(unstudied) # nice
+str(unstudied$significant)
+unstudied$significant <- as.factor(unstudied$significant)
+nrow(unstudied)
+nrow(mgiGenes) # cool
+mgiGenesPlusUnstudied <- rbind(mgiGenes, unstudied)
+unlabelledGenesWithMGIannot <- merge(unlabelledGenesPreddf,mgiGenesPlusUnstudied, by=0); rownames(unlabelledGenesWithMGIannot)<- unlabelledGenesWithMGIannot$Row.names; unlabelledGenesWithMGIannot$Row.names<- NULL
+# cool
+head(unlabelledGenesWithMGIannot[1:3,1:3])
+?roc_auc
+c <-roc_curve(unlabelledGenesWithMGIannot, truth = significant, .pred_TRUE,
+              event_level = "first")
+autoplot(c)
+rocauc <- roc_auc(unlabelledGenesWithMGIannot, significant, .pred_TRUE)
+rocauc
+
