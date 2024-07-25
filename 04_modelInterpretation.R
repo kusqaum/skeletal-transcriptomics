@@ -44,7 +44,8 @@ cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
 #cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
 ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
-  scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
+  scale_fill_npg()+
+  #scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
   theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
   theme_cowplot(font_size = 18)
@@ -54,9 +55,9 @@ predictionsAll <- lapply(nmfRfSVResList, function(x){
   x$aug
 })
 
-emp <- lapply(nmfRfSVResList, function(x){
-  list("pred" = x$aug, "AUC"= x$AUC$.estimate)
-})
+# emp <- lapply(nmfRfSVResList, function(x){
+#   list("pred" = x$aug, "AUC"= x$AUC$.estimate)
+# })
 
 predictionsXGB <- lapply(xgbResList, function(x){
   x$aug
@@ -65,40 +66,6 @@ predictionsXGB <- lapply(xgbResList, function(x){
 rfAllPredictions <- bind_rows(predictionsAll)
 xgbAllPred <- bind_rows(predictionsXGB)
 
-rfAllPredictions %>% 
-  group_by(dim) %>%
-# rocCurve <- function(predictions){
-  # predictions %>% group_by(dim) %>%
-  roc_curve(truth = significant, .pred_FALSE) %>%
-  ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_path(linewidth=0.9, show.legend = F)+
-  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
-  geom_text(aes(x=0.25, y=0.70, label = 50))
-  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
-        aspect.ratio = 1, legend.position = "none")+
-  theme_bw(base_size = 20) +
-  facet_wrap(~ dim) +
-  #guides(colour = guide_legend(title = "Dimension"))+
-  scale_colour_manual(values = c("pink3", "tomato", "tan2", "purple4", "turquoise3", "darkgreen"))
-  } 
-  
-noNetworkROCcurveRF <- rocCurve(predictions = rfAllPredictions)
-noNetworkROCcurveRF +
-  facet_wrap(~"RF")
-ggsave("processed/nonetworkROCcurveRF.pdf", noNetworkROCcurveRF, width = 10, height = 8)
-rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
-  roc_curve(truth = significant, .pred_FALSE) %>%
-  ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_path(linewidth=0.9)+
-  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
-  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
-        aspect.ratio = 1)+
-  theme_bw(base_size = 20) +
-  guides(colour = guide_legend(title = "Dimension"))+
-  scale_colour_manual(values = c("turquoise3", "darkgreen"))+
-  facet_wrap(~"XGB")
-  
-rocCurveXGB
 #### get all the auc scores ####
 aucRF <-lapply(nmfRfSVResList, function(x){ # where the input is a list containing multiple ML results
   x$AUC$.estimate
@@ -119,6 +86,53 @@ listDims
 dimension <- data.frame(dimensions = listDims, Algorithm = "NMF")
 resDf <- cbind(aucDf, dimension)
 head(resDf)
+
+df_text <- data.frame(dim = listDims, x = 0.2, y = 0.8,
+                      label = paste0("AUC = ",round(aucDf$auc_scores, 3)))
+head(df_text)
+rfMetrics <- rfAllPredictions %>% 
+  group_by(dim) %>%
+# rocCurve <- function(predictions){
+  # predictions %>% group_by(dim) %>%
+  roc_curve(truth = significant, .pred_FALSE)
+
+
+noNetworkROCcurveRF <-ggplot(rfMetrics, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
+  geom_line(linewidth=0.9, show.legend = F)+ 
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  
+  theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
+         aspect.ratio = 1, legend.position="none")+
+  theme_bw(base_size = 16)+# theme(legend.position = "none")+
+  scale_colour_npg()+
+  facet_wrap(~ paste0(dim, " NMF dimensions"))+
+  geom_text(data = df_text, mapping = aes(x = 0.3,  y=0.85, label = label), show.legend = F)# +
+
+noNetworkROCcurveRF
+
+
+  # geom_text(label = c(aucDf$auc_scores)
+  
+  #guides(colour = guide_legend(title = "Dimension"))+
+  #scale_colour_manual(values = c("pink3", "tomato", "tan2", "purple4", "turquoise3", "darkgreen"))
+  #} 
+  
+# noNetworkROCcurveRF <- rocCurve(predictions = rfAllPredictions)
+
+ggsave("processed/nonetworkROCcurveRF.pdf", noNetworkROCcurveRF, width = 10, height = 8)
+rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
+  roc_curve(truth = significant, .pred_FALSE) %>%
+  ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
+  geom_path(linewidth=0.9)+
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
+        aspect.ratio = 1)+
+  theme_bw(base_size = 20) +
+  guides(colour = guide_legend(title = "Dimension"))+
+  # scale_colour_manual(values = c("turquoise3", "darkgreen"))+
+  # facet_wrap(~"XGB")
+  
+rocCurveXGB
 
 #finding which dimension the model that gave the highest auc score was trained on
 posBestFit <- which.max(resDf$auc)
@@ -277,9 +291,10 @@ saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause cl
 #- MGI
 head(unlabelledGenesPreddf[1:4,1:5])
 mgiGenes <- read.table("processed/annotatedMGIgenes.txt", header = T, sep = "\t")
+#just remove duplicates since they're all the same level anyways
 mgiGenes <- mgiGenes %>% distinct(ensembl_gene_id, .keep_all = T)
 str(mgiGenes$ensembl_gene_id)
-
+# make gene names rownames
 rownames(mgiGenes)<- mgiGenes$ensembl_gene_id ; mgiGenes$ensembl_gene_id<-NULL
 head(mgiGenes)
 mgiGenes$significant<- as.factor(mgiGenes$significant)
@@ -295,20 +310,76 @@ nrow(unlabelledGenesPreddf) - (length(which(rownames(unlabelledGenesPreddf) %in%
 totallyUnstudied <- rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes)]
 class(totallyUnstudied)
 length(totallyUnstudied)
+# so those genes that aren't in the mgi DB, assuming they're not associated, let's label them as that
 unstudied <- data.frame(significant = rep(c("FALSE"), times = length(totallyUnstudied)), row.names = totallyUnstudied)
 head(unstudied) # nice
+tail(unstudied)
 str(unstudied$significant)
 unstudied$significant <- as.factor(unstudied$significant)
 nrow(unstudied)
 nrow(mgiGenes) # cool
 mgiGenesPlusUnstudied <- rbind(mgiGenes, unstudied)
+# now let's retain only those genes in mgiGenesplus unstudied DF that are also in our unstudied/unlabelled genes
 unlabelledGenesWithMGIannot <- merge(unlabelledGenesPreddf,mgiGenesPlusUnstudied, by=0); rownames(unlabelledGenesWithMGIannot)<- unlabelledGenesWithMGIannot$Row.names; unlabelledGenesWithMGIannot$Row.names<- NULL
 # cool
 head(unlabelledGenesWithMGIannot[1:3,1:3])
-?roc_auc
-c <-roc_curve(unlabelledGenesWithMGIannot, truth = significant, .pred_TRUE,
-              event_level = "first")
-autoplot(c)
-rocauc <- roc_auc(unlabelledGenesWithMGIannot, significant, .pred_TRUE)
-rocauc
 
+mgiCurve <-roc_curve(unlabelledGenesWithMGIannot, truth = significant, .pred_TRUE,
+              event_level = "first")
+head(mgiCurve)
+mgiCurve <- mgiCurve %>% mutate(database = "MGI")
+head(mgiCurve)
+rocaucMGI <- roc_auc(unlabelledGenesWithMGIannot, significant, .pred_TRUE)
+rocaucMGI
+
+
+# now looking at human phenotype ontology- genes that are annotated to a skeletal abnormality
+# lets quickly do this 
+hpOnt <- read.table("processed/humphenotOntGenes.txt", header = T, sep = "\t")
+head(hpOnt)
+length(unique(hpOnt$ensembl_gene_id))
+
+rownames(hpOnt)<- hpOnt$ensembl_gene_id; hpOnt$ensembl_gene_id<-NULL
+hpOnt$significant <- as.factor(hpOnt$significant)
+length(which(rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)))
+# we have 1415 genes that are unlabelled (unstudied in impc) to be known to have skel phenotype according to hpo
+length(rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)])
+# the remainder of these 7586genes^ are not known to have a skeletal abnormality in the human phenotype ont
+unstGene <- rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)]
+# so lets get all their gene names and make them as a dataframe and call them false (i.e., not associated with a phenotype)
+unstGeneDf <- data.frame(significant = rep(c("FALSE"), times = length(unstGene)), row.names = unstGene)
+head(unstGeneDf)
+dim(unstGeneDf)
+#ncie
+dim(hpOnt)
+# now let's merge the positively associated genes from hpo and the 'negatively'associated genes#
+#we have that are not labelled to be associated with HPO
+hpoGenesPlusUnstudied <- rbind(hpOnt, unstGeneDf)
+# so now we have + and - labels
+
+head(hpoGenesPlusUnstudied)
+dim(hpoGenesPlusUnstudied)
+
+unlabelledGenesWithHPOannot <- merge(unlabelledGenesPreddf, hpoGenesPlusUnstudied, by= 0); rownames(unlabelledGenesWithHPOannot) <- unlabelledGenesWithHPOannot$Row.names; unlabelledGenesWithHPOannot$Row.names <- NULL
+head(unlabelledGenesWithHPOannot[1:3,1:5])
+unlabelledGenesWithHPOannot$significant <-as.factor(unlabelledGenesWithHPOannot$significant)
+#cool looks good i guess
+hpoCurve <- roc_curve(unlabelledGenesWithHPOannot, truth = significant, .pred_TRUE)
+hpoCurve <- hpoCurve %>% mutate(database = "HPO")
+
+hpoMgi <- rbind(hpoCurve, mgiCurve)
+ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)) +
+  geom_path(linewidth=0.9)+
+  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
+        aspect.ratio = 1)+
+  theme_bw(base_size = 20)+
+  scale_color_bmj()+
+  facet_wrap(~"unlabelled genes validation")
+  
+ # theme_cowplot()
+  #theme_minimal_grid(font_size = 17)
+  #theme_bw(base_size = 20)
+#w what is the area under curve???????????
+rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
+rocaucHPO
