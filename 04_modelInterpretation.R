@@ -28,10 +28,15 @@ nmfRfSVResList<- nmfRfSVResList[which(sapply(nmfRfSVResList, function(x) x$dim >
 #be mode diverse
 #nmfRfSVResList <- nmfRfSVResList[which(sapply(nmfRfSVResList, '[[', 13 )>5)]
 # read in xgboost file names
-xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV")
+xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV_")
+length(xgboostFileNames)
 xgbResList <- lapply(xgboostFileNames, readRDS)
 
+# so let's read in the PCA feature sets 
 
+pcaXGBfileNames <- list.files("processed", full.names = T, pattern = "PCAxgbRes_")
+pcaXGBResList <- lapply(pcaXGBfileNames, readRDS)
+length(pcaXGBResList)
 
 cvRFSV <- lapply(nmfRfSVResList, function(x){
   x$resDf
@@ -44,14 +49,60 @@ cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
 #cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
 ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
-  scale_fill_npg()+
+  scale_fill_manual(values = c("#4DBBD5B2"))+
+  #scale_fill_npg()+
   #scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
   theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
   theme_cowplot(font_size = 18)
+head(cvAllrf)
+dim(cvAllrf)
+cvRFFilt <- cvAllrf %>% filter(dim == "200" | dim == "500")
+dim(cvRFFilt)
+# so we know which AUC the final RF model from the cross validation was as well!
+cvRfMetr <- lapply(nmfRfSVResList, function(x){
+  r <- x$resDf
+  maxAuc <- as.data.frame(r[which.max(r$mean),])
+})
+maxRFAucAllDims <- do.call("rbind", cvRfMetr) %>%
+  select(mean, dim, lowerbound, upperbound, Algorithm)
+# xgb
+cvxgbMetr <- lapply(xgbResList, function(x){
+  r <- x$resDf
+  maxAuc <- as.data.frame(r[which.max(r$mean),])
+})
+maxXGBAucAllDims <- do.call("rbind", cvxgbMetr) %>%
+  select(mean, dim, lowerbound, upperbound, Algorithm)
 
+dim(cvAllxgb)
+toPlotTwoFeatSetsCV <- bind_rows(cvAllxgb, cvRFFilt)
+ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
+  geom_boxplot()+
+  scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) + #, "tomato", "pink", "tan2", "grey", "turquoise4"))+
+  labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
+  theme_cowplot(font_size = 18)
 
-predictionsAll <- lapply(nmfRfSVResList, function(x){
+####how about PCA feature sets performance? we've trained xgb for this...
+# in the interest of time....
+cvXGBsVpca <- lapply(pcaXGBResList, function(x){
+  x$resDf
+})
+cvPcaAllxgb <- do.call("rbind", cvXGBsVpca) %>% mutate(model = "XGB")
+####DO THE PLOT TOMORROW####
+# ggplot(cvPcaAllxgb, aes(x = as.factor(dim)))
+
+cvpcaXGBMetr <- lapply(pcaXGBResList, function(x){
+  r <- x$resDf
+  maxAuc <- as.data.frame(r[which.max(r$mean),])
+})
+maxPCAaucAllDims <- do.call("rbind", cvpcaXGBMetr)%>%
+  select(mean, lowerbound, upperbound, dim, Algorithm)
+# ok so we can see that the PCA feature sets when an xgb model is trained
+# on them they give poorer performance than the NMF feature sets
+
+#############--
+predictionsAllRf <- lapply(nmfRfSVResList, function(x){
   x$aug
 })
 
@@ -63,7 +114,7 @@ predictionsXGB <- lapply(xgbResList, function(x){
   x$aug
 })
 
-rfAllPredictions <- bind_rows(predictionsAll)
+rfAllPredictions <- bind_rows(predictionsAllRf)
 xgbAllPred <- bind_rows(predictionsXGB)
 
 #### get all the auc scores ####
@@ -90,49 +141,45 @@ head(resDf)
 df_text <- data.frame(dim = listDims, x = 0.2, y = 0.8,
                       label = paste0("AUC = ",round(aucDf$auc_scores, 3)))
 head(df_text)
+# now we can plot the predictions
 rfMetrics <- rfAllPredictions %>% 
   group_by(dim) %>%
-# rocCurve <- function(predictions){
-  # predictions %>% group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE)
 
 
 noNetworkROCcurveRF <-ggplot(rfMetrics, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_line(linewidth=0.9, show.legend = F)+ 
+  geom_line(linewidth=1.5, show.legend = F)+ 
   geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
   
   theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
          aspect.ratio = 1, legend.position="none")+
-  theme_bw(base_size = 16)+# theme(legend.position = "none")+
+  theme_bw(base_size = 20)+# theme(legend.position = "none")+
   scale_colour_npg()+
-  facet_wrap(~ paste0(dim, " NMF dimensions"))+
-  geom_text(data = df_text, mapping = aes(x = 0.3,  y=0.85, label = label), show.legend = F)# +
+  facet_wrap(~ paste0(dim, " NMF dimensions"))+ 
+  theme(strip.text = element_text(size=20))+
+  geom_text(data = df_text, mapping = aes(x = 0.3,  y=0.85, label = label),
+            size= 8, show.legend = F)# +
 
 noNetworkROCcurveRF
+ggsave("output/nonetworkROCcurveRF.png", noNetworkROCcurveRF, width = 12, height = 8)
 
 
-  # geom_text(label = c(aucDf$auc_scores)
-  
-  #guides(colour = guide_legend(title = "Dimension"))+
-  #scale_colour_manual(values = c("pink3", "tomato", "tan2", "purple4", "turquoise3", "darkgreen"))
-  #} 
-  
-# noNetworkROCcurveRF <- rocCurve(predictions = rfAllPredictions)
-
-ggsave("processed/nonetworkROCcurveRF.pdf", noNetworkROCcurveRF, width = 10, height = 8)
 rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE) %>%
   ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
-  geom_path(linewidth=0.9)+
+  geom_path(linewidth=1.5)+
   geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
   theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
         aspect.ratio = 1)+
-  theme_bw(base_size = 20) +
-  guides(colour = guide_legend(title = "Dimension"))+
-  # scale_colour_manual(values = c("turquoise3", "darkgreen"))+
-  # facet_wrap(~"XGB")
-  
+  theme_bw(base_size = 26) +
+  guides(colour = guide_legend(title = "No. of NMF dimensions"))+
+  facet_wrap(~"XGB")+
+  theme(strip.text = element_text(size=24), legend.position = "bottom")+
+  scale_colour_manual(values = c("#E64B35B2", "#3C5488B2"))
+
 rocCurveXGB
+ggsave("output/nonetworkROCcurveXGBnmf.png", rocCurveXGB, width = 7.5, height = 8)
+
 
 #finding which dimension the model that gave the highest auc score was trained on
 posBestFit <- which.max(resDf$auc)
@@ -152,6 +199,10 @@ dim(bestDf)
 #find the final fit for that model
 bestFit <- nmfRfSVResList[[posBestFit]]$finalFit
 rfCVdf_forCR <- nmfRfSVResList[[posBestFit]]$dfForCorrectR
+# an also for that model, what was the area under the curve??/??/
+bestModMetrics <- nmfRfSVResList[[posBestFit]]$resDf
+# finalModMetrics <- which.max(bestModMetrics$mean)
+finalModMetrics <- finalModMetrics[which.max(bestModMetrics$mean), ]
 
 #need to also get xgb mod 500 dim
 for(e in 1:length(xgbResList)){
@@ -383,3 +434,11 @@ ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)) +
 #w what is the area under curve???????????
 rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
 rocaucHPO
+
+
+## part 4? what are the top rankeed genes?
+
+# let's see
+
+orderedGenes <- unlabelledGenesPreddf[order(unlabelledGenesPreddf$.pred_TRUE, decreasing = T),]
+top10genes <- orderedGenes[1:10,]
