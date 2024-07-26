@@ -31,11 +31,15 @@ nmfRfSVResList<- nmfRfSVResList[which(sapply(nmfRfSVResList, function(x) x$dim >
 xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV_")
 length(xgboostFileNames)
 xgbResList <- lapply(xgboostFileNames, readRDS)
-
+xgbResList <- xgbResList[order(sapply(xgbResList, function(x) x$dim))]
+xgbResList[[2]]<- NULL
+length(xgbResList)
 # so let's read in the PCA feature sets 
 
 pcaXGBfileNames <- list.files("processed", full.names = T, pattern = "PCAxgbRes_")
+length(pcaXGBfileNames)
 pcaXGBResList <- lapply(pcaXGBfileNames, readRDS)
+pcaXGBResList <- pcaXGBResList[order(sapply(xgbResList, function(x) x$dim))]
 length(pcaXGBResList)
 
 cvRFSV <- lapply(nmfRfSVResList, function(x){
@@ -47,17 +51,22 @@ cvXGBsV <- lapply(xgbResList, function(x){
 cvAllrf <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
 cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
 #cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
-ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
+nmfRFcvBP <- ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values = c("#4DBBD5B2"))+
   #scale_fill_npg()+
   #scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
-  theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
-  theme_cowplot(font_size = 18)
+  theme_cowplot(font_size = 22)+
+  facet_wrap(~"RF")+
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
+        strip.background = element_rect(color = "black", size = 0.4),
+        legend.position = "none")
+nmfRFcvBP
+ggsave("output/nmfRFcvBP.png", nmfRFcvBP, width = 7, height = 5)
 head(cvAllrf)
 dim(cvAllrf)
-cvRFFilt <- cvAllrf %>% filter(dim == "200" | dim == "500")
+cvRFFilt <- cvAllrf %>% filter(dim == "50" | dim == "500")
 dim(cvRFFilt)
 # so we know which AUC the final RF model from the cross validation was as well!
 cvRfMetr <- lapply(nmfRfSVResList, function(x){
@@ -79,19 +88,50 @@ toPlotTwoFeatSetsCV <- bind_rows(cvAllxgb, cvRFFilt)
 ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) + #, "tomato", "pink", "tan2", "grey", "turquoise4"))+
-  labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
+  labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Algorithm") +
   theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
-  theme_cowplot(font_size = 18)
+  theme_cowplot(font_size = 20)+
+  theme_cowplot(font_size = 18, line_size = 0.4)+
+  theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA), 
+        legend.position = "bottom")
 
-####how about PCA feature sets performance? we've trained xgb for this...
+####how about PCA feature sets performance? we've only trained xgb for this...
 # in the interest of time....
 cvXGBsVpca <- lapply(pcaXGBResList, function(x){
   x$resDf
 })
 cvPcaAllxgb <- do.call("rbind", cvXGBsVpca) %>% mutate(model = "XGB")
-####DO THE PLOT TOMORROW####
-# ggplot(cvPcaAllxgb, aes(x = as.factor(dim)))
+cvPcaAllxgbFilt <- cvPcaAllxgb %>% filter(dim=="50"|dim=="500")
 
+plotPCAXGBvsNMFxgbDf <- rbind(cvAllxgb, cvPcaAllxgbFilt)
+pcaXGBcvBoxplot <- ggplot(cvPcaAllxgb, aes(x = as.factor(dim), y = mean, fill = model))+
+  geom_boxplot(show.legend = F)+
+  scale_fill_manual(values= c("#8491B4B2"))+
+  labs(x="Number of PCA dimensions", y="Cross-validation AUC")+#, fill= "Model") +
+  theme(axis.ticks.x = element_blank(), 
+        axis.text.x = element_text(angle = 30), legend.position = "none")+
+  theme_cowplot(font_size = 22, line_size = 0.4)+
+  #theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA))+
+  facet_wrap(~"XGB")+
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
+        strip.background = element_rect(color = "black", size = 0.4))
+pcaXGBcvBoxplot
+ggsave("output/pcaXGBcvBP.png", pcaXGBcvBoxplot, width = 7, height = 5)
+
+# instead let's just compare the NMF AND PCA XGB results:
+pcaVSnmfXgbBoxplot <- ggplot(plotPCAXGBvsNMFxgbDf, aes(x = as.factor(dim), y = mean, fill = Algorithm))+
+  geom_boxplot()+
+  scale_fill_manual(values= c("#CD202CB2", "#8491B4B2"))+
+  labs(x="Number of dimensions", y="Cross-validation AUC")+#, fill= "Model") +
+  theme_cowplot(font_size = 22, line_size = 0.4)+
+  #theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA))+
+  facet_wrap(~"XGB")+
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
+        strip.background = element_rect(color = "black", size = 0.4), 
+        legend.position = "bottom")
+
+pcaVSnmfXgbBoxplot
+ggsave("output/pcaVSnmfXgbBoxplot.png", pcaVSnmfXgbBoxplot ,width = 8, height = 6)
 cvpcaXGBMetr <- lapply(pcaXGBResList, function(x){
   r <- x$resDf
   maxAuc <- as.data.frame(r[which.max(r$mean),])
