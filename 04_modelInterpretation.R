@@ -5,6 +5,7 @@ library(tidymodels)
 library(correctR)
 library(cowplot)
 library(pheatmap)
+library(ggsci)
 # library(clusterProfiler)
 # library(org.Hs.eg.db)
 # need to read in results from last script
@@ -59,8 +60,8 @@ nmfRFcvBP <- ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
   theme_cowplot(font_size = 22)+
   facet_wrap(~"RF")+
-  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
-        strip.background = element_rect(color = "black", size = 0.4),
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4), 
+        strip.background = element_rect(color = "black",  linewidth = 0.4),
         legend.position = "none")
 nmfRFcvBP
 ggsave("output/nmfRFcvBP.png", nmfRFcvBP, width = 7, height = 5)
@@ -85,7 +86,8 @@ maxXGBAucAllDims <- do.call("rbind", cvxgbMetr) %>%
 
 dim(cvAllxgb)
 toPlotTwoFeatSetsCV <- bind_rows(cvAllxgb, cvRFFilt)
-ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
+
+bestDimsRFvsXGBbplot <- ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) + #, "tomato", "pink", "tan2", "grey", "turquoise4"))+
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Algorithm") +
@@ -95,6 +97,8 @@ ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
   theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA), 
         legend.position = "bottom")
 
+#need to save above plot:
+# ggsave("output/cccc", )
 ####how about PCA feature sets performance? we've only trained xgb for this...
 # in the interest of time....
 cvXGBsVpca <- lapply(pcaXGBResList, function(x){
@@ -189,7 +193,7 @@ rfMetrics <- rfAllPredictions %>%
 
 noNetworkROCcurveRF <-ggplot(rfMetrics, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
   geom_line(linewidth=1.5, show.legend = F)+ 
-  geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linewidth=0.4, lty="dashed", alpha = 0.5)+
   
   theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
          aspect.ratio = 1, legend.position="none")+
@@ -242,7 +246,7 @@ rfCVdf_forCR <- nmfRfSVResList[[posBestFit]]$dfForCorrectR
 # an also for that model, what was the area under the curve??/??/
 bestModMetrics <- nmfRfSVResList[[posBestFit]]$resDf
 # finalModMetrics <- which.max(bestModMetrics$mean)
-finalModMetrics <- finalModMetrics[which.max(bestModMetrics$mean), ]
+finalModMetrics <- bestModMetrics[which.max(bestModMetrics$mean), ]
 
 #need to also get xgb mod 500 dim
 for(e in 1:length(xgbResList)){
@@ -288,56 +292,77 @@ all(rownames(top5FeatsModeldf)%in% rownames(labelsFullDf))
 all(rownames(top5FeatsModeldf)== rownames(labelsFullDf))
 #they're in order so can just do cbind
 top5FeatsModeldfLabelled <- cbind(top5FeatsModeldf, labelsFullDf)
-q1 <- list()
-
+# q1 <- list()
 for (c in 1:(ncol(top5FeatsModeldfLabelled)-1)) {
+  #print(c)
+  feat <- colnames(top5FeatsModeldfLabelled)[c]
+  name <- sprintf("%s_nmf_%s",c,colnames(top5FeatsModeldfLabelled)[c])
   pl <- ggplot(top5FeatsModeldfLabelled)+ 
-         aes(y = top5FeatsModeldfLabelled[,c], x= significant)+
+         aes(y = top5FeatsModeldfLabelled[,c], x= significant, fill=significant)+
     geom_boxplot()+
-    xlab("")+
-    theme_cowplot(font_size = 16)
+    xlab("") + ylab(paste0("NMF " ,colnames(top5FeatsModeldfLabelled)[c]))+
+    theme_cowplot(font_size = 16)+
+    theme(panel.background = element_rect(colour = "black", fill = NA, linewidth = 0.4))+
+    # scale_fill_bmj()+
+    scale_fill_manual(values = c("#69BE28B2", "#E37222B2"))+ 
+    scale_x_discrete(labels = c("Associated", "Not associated"))+
+    theme(legend.position = "none")
+  ggsave(paste0("output/", name,".png"), pl, height = 3, width = 4)
+  print(name)
   print(pl)
-  q1 <- append(q1, pl)
+  # q1[[feat]]<- pl
 }
-ggplot(top5FeatsModeldfLabelled, aes(x=top5FeatsModeldfLabelled[,5], y=significant))+
-  geom_boxplot()
+# l <- marrangeGrob(q1, ncol = 2,nrow = 4)
+# ggsave("output/test.pdf", l, height = 20, width = 20)
 
 # top5FeatsModeldf<- top5FeatsModeldf %>% 
 #   dplyr::mutate(TotalWeight = rowSums(top5FeatsModeldf))
 # x <- as.data.frame(top5FeatsModeldf$sum)
 
 #maybe put the top important feature in order???
-# top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
-# 
-# #let's just focus on one feature:
-# firstFeature <- data.frame(top5FeatsModeldf[,1], row.names = rownames(top5FeatsModeldf))
-# # nameFeat <- colnames(top5FeatsModeldf)[1]
-# colnames(firstFeature)[1] <- colnames(top5FeatsModeldf)[1]
-# firstFeat <- firstFeature %>% dplyr::arrange(desc(Feature272)) 
-# ##
-
-mat <- as.matrix(top5FeatsModeldf)
+top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
+humanGenesSymbs <- read.table("processed/human_coding_genes.txt", sep = "\t", header = T)
+humanGenesSymbs <- humanGenesSymbs%>% filter(hgnc_symbol!=""); rownames(humanGenesSymbs) <- humanGenesSymbs$ensembl_gene_id
+humanGenesSymbs$ensembl_gene_id <-NULL
+head(humanGenesSymbs) 
+# so now gonna merge with top feats DF
+head(top5FeatsModeldfLabelled)
+topFeatsWithSymbols <- merge(top5FeatsModeldf, humanGenesSymbs, by=0); rownames(topFeatsWithSymbols) <- topFeatsWithSymbols$hgnc_symbol; topFeatsWithSymbols$Row.names<-NULL; topFeatsWithSymbols$hgnc_symbol <-NULL
+head(topFeatsWithSymbols)
+#topFeatsWithSymbols <- topFeatsWithSymbols %>% arrange(desc(Feature272))
+mat <- as.matrix(topFeatsWithSymbols)
 head(mat)
 mat <- apply(mat, 2, rank)
 head(mat)
 #pdf("processed/testFig.pdf", width = 10, height = 10)
 # just select the top 15 genes in the most important feature
-heatmap <- pheatmap::pheatmap(mat, border_color = "white",
+heatmap <- pheatmap::pheatmap(mat[1:20,], border_color = "white",
                    cluster_rows = F, 
-                   cluster_cols = F, show_rownames = F
+                   cluster_cols = F, show_rownames = T, 
                    )
 ggsave("processed/heatmap.pdf",heatmap, height = 5, width = 10)
-# hm <- heatmap.2(x = mat[1:15,], 
-#           col = RColorBrewer::brewer.pal(9, c("RdBu")), 
-#           #col="bluered",
-#           dendrogram = "none", 
-#           Rowv = F, 
-#           Colv = F,
-#           tracecol = NA,
-#           rowsep = 1:nrow(mat),
-#           #colsep = 1:ncol(mat)-1,
-#           trace = 'none')
-# hm
+
+####clusterprofiler code####
+
+getEachFeature_fctn <- function(dataframeOfFeats){
+  single <- list()
+  for (j in 1:ncol(dataframeOfFeats)){ 
+    print(j)
+    single[[j]] <- data.frame(dataframeOfFeats[,j],
+                            row.names = rownames(dataframeOfFeats))
+    colnames(single[[j]]) <- colnames(dataframeOfFeats)[j]
+    single[[j]] <- single[[j]] %>% arrange(desc(colnames(single[[j]])))
+    #single[[j]]$Gene <- rownames(dataframeOfFeats)
+  }
+  return(single)
+} 
+
+eachFeat <- getEachFeature_fctn(top5FeatsModeldf)
+saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause clusterprofiler 
+#not installing
+
+
+
 
 # ggplot(modelFeatsDf, aes(x = , y= ))+geom_
 colnames <- paste0("Feature", 1:ncol(bestDf))
@@ -349,30 +374,9 @@ unlabelledGenesPred <- augment(bestFit, unlabelledGenes)
 head(unlabelledGenesPred[,2312:2313])
 
 unlabelledGenesPreddf <- as.data.frame(unlabelledGenesPred); rownames(unlabelledGenesPreddf) <- rownames(unlabelledGenesPred)
-length(which(is.na(unlabelledGenes)))
-length(which(unlabelledGenes$.pred_class=="TRUE"))
-length(which(unlabelledGenes$.pred_class!= "TRUE"))
-
-
-####clusterprofiler code####
-# enrichKEGG(gene = row.names(bestDf))
-
-getEachFeature_fctn <- function(dataframeOfFeats){
-  sing <- list()
-  for (j in 1:(ncol(dataframeOfFeats)-1)){ # minus 1 cause don't want last col
-    print(j)
-    sing[[j]] <- data.frame(dataframeOfFeats[,j],
-                            row.names = rownames(dataframeOfFeats))
-    colnames(sing[[j]]) <- colnames(dataframeOfFeats)[j]
-    sing[[j]] <- sing[[j]] %>% arrange(desc(colnames(sing[[j]])))
-    #sing[[j]]$Gene <- rownames(dataframeOfFeats)
-  }
-  return(sing)
-} 
-
-eachFeat <- getEachFeature_fctn(top5FeatsModeldf)
-saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause clusterprofiler 
-#not installing
+head(unlabelledGenesPreddf[1:3,1:4])
+length(which(unlabelledGenesPreddf$.pred_class=="TRUE"))
+length(which(unlabelledGenesPreddf$.pred_class!= "TRUE"))
 
 
 
@@ -421,7 +425,7 @@ head(mgiCurve)
 mgiCurve <- mgiCurve %>% mutate(database = "MGI")
 head(mgiCurve)
 rocaucMGI <- roc_auc(unlabelledGenesWithMGIannot, significant, .pred_TRUE)
-rocaucMGI
+rocaucMGI <- rocaucMGI %>% mutate(database = "MGI")
 
 
 # now looking at human phenotype ontology- genes that are annotated to a skeletal abnormality
@@ -459,26 +463,39 @@ hpoCurve <- roc_curve(unlabelledGenesWithHPOannot, truth = significant, .pred_TR
 hpoCurve <- hpoCurve %>% mutate(database = "HPO")
 
 hpoMgi <- rbind(hpoCurve, mgiCurve)
-ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)) +
+#let's plot mgi and hpo now
+ext_text <- rbind(rocaucHPO, rocaucMGI)
+
+mgihpoROC <- ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)) +
   geom_path(linewidth=0.9)+
   geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
   theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
         aspect.ratio = 1)+
-  theme_bw(base_size = 20)+
+  theme_bw(base_size = 22)+
+  theme(legend.position = "none")+
   scale_color_bmj()+
-  facet_wrap(~"unlabelled genes validation")
-  
+  facet_wrap(~database) + 
+  geom_text(data = ext_text, mapping = aes(x=0.3, y=0.87, label = paste0("AUC = ", round(.estimate, 3))),
+            size = 8)
+
+mgihpoROC
+ggsave("output/ROCmgihpo.png", mgihpoROC, width = 8, height = 4.5)  
  # theme_cowplot()
   #theme_minimal_grid(font_size = 17)
   #theme_bw(base_size = 20)
 #w what is the area under curve???????????
 rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
+rocaucHPO <- rocaucHPO %>% mutate(database = "HPO")
 rocaucHPO
-
 
 ## part 4? what are the top rankeed genes?
 
 # let's see
 
 orderedGenes <- unlabelledGenesPreddf[order(unlabelledGenesPreddf$.pred_TRUE, decreasing = T),]
-top10genes <- orderedGenes[1:10,]
+top20genes <- orderedGenes[1:20,]
+top20genesWsymbs <- merge(top20genes, humanGenesSymbs, by=0)
+rownames(top20genesWsymbs) <- top20genesWsymbs$hgnc_symbol; top20genesWsymbs$Row.names <-NULL; top20genesWsymbs$hgnc_symbol<-NULL
+top20genesWsymbs <- top20genesWsymbs[order(top20genesWsymbs$.pred_TRUE, decreasing = T),]
+## can save it if you like...
+write.table(as.data.frame(top20genesWsymbs[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
