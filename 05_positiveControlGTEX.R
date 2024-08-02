@@ -249,8 +249,25 @@ mortPred <- lapply(mortalityRes, function(x){
   x$aug
 })
 mortPredDf <- bind_rows(mortPred)
-mortRoc <- rocCurve(mortPredDf)
-mortRoc
+mortalityROC <- mortPredDf %>% group_by(dim)%>%
+  roc_curve(truth = significant, .pred_FALSE)%>%
+  ggplot( aes(x = 1-specificity, y = sensitivity, colour = as.factor(dim)))+
+  geom_path(linewidth = 0.7)+
+  geom_abline(slope = 1, intercept = 0, size = 0.4, lty = "dashed")+
+  theme(panel.border = element_rect(colour = "black", linewidth = 1, fill = "white"))+
+  theme_bw(base_size = 28)+
+  scale_colour_npg()+
+  facet_wrap(~ factor(paste0(dim, " NMF dimensions"), c("50 NMF dimensions", "100 NMF dimensions",
+                                                       "150 NMF dimensions","200 NMF dimensions"))) +
+  theme(legend.position = "none")+
+  theme(strip.text = element_text(size =20))
+
+mortalityAUC <- lapply(mortalityRes, function(x){
+  x$AUC
+})
+mortalityAUC <- do.call("rbind",mortalityAUC)
+  
+ggsave("output/mortalityCurves.png", mortalityROC, width = 14.5, height = 15)
 # gtex <- read.delim("raw/rnaSeqGtex/gtex_Analysis.gct", header = T,skip = 2, sep = "\t")
 # 
 # 
