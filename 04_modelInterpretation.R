@@ -33,7 +33,7 @@ xgboostFileNames <- list.files("processed", full.names = T, pattern = "xgbResSV_
 length(xgboostFileNames)
 xgbResList <- lapply(xgboostFileNames, readRDS)
 xgbResList <- xgbResList[order(sapply(xgbResList, function(x) x$dim))]
-xgbResList[[2]]<- NULL
+
 length(xgbResList)
 # so let's read in the PCA feature sets 
 
@@ -50,13 +50,12 @@ cvXGBsV <- lapply(xgbResList, function(x){
   x$resDf
 })
 cvAllrf <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
+saveRDS(cvAllrf, "processed/cvAllRf_noNetworkRes.rds")
 cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
 #cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
 nmfRFcvBP <- ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values = c("#4DBBD5B2"))+
-  #scale_fill_npg()+
-  #scale_fill_manual(values =c("#56B4E9", "tomato", "pink", "tan2", "grey", "turquoise4"))+
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Model") +
   theme_cowplot(font_size = 22)+
   facet_wrap(~"RF")+
@@ -89,16 +88,21 @@ toPlotTwoFeatSetsCV <- bind_rows(cvAllxgb, cvRFFilt)
 
 bestDimsRFvsXGBbplot <- ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
-  scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) + #, "tomato", "pink", "tan2", "grey", "turquoise4"))+
+  scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) +
   labs(x="Number of NMF dimensions", y="Cross-validation AUC", fill= "Algorithm") +
   theme(axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 30))+
-  theme_cowplot(font_size = 20)+
-  theme_cowplot(font_size = 18, line_size = 0.4)+
+  theme_cowplot(font_size = 22, line_size = 0.4)+
   theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA), 
         legend.position = "bottom")
 
+bestDimsRFvsXGBbplot
 #need to save above plot:
-# ggsave("output/cccc", )
+ggsave("output/bestNmfDimsRFvsXGBbplot.png", bestDimsRFvsXGBbplot, width = 4, height = 3.6)
+
+topPl <- plot_grid(nmfRFcvBP, bestDimsRFvsXGBbplot, ncol=2, align = 'v', labels = "auto")
+# ggsave("output/topPl.png", topPl, width = 10.5, height = 5.5)
+saveRDS(bestDimsRFvsXGBbplot, "output/p1_RFvsXGB.rds")
+
 ####how about PCA feature sets performance? we've only trained xgb for this...
 # in the interest of time....
 cvXGBsVpca <- lapply(pcaXGBResList, function(x){
@@ -107,20 +111,20 @@ cvXGBsVpca <- lapply(pcaXGBResList, function(x){
 cvPcaAllxgb <- do.call("rbind", cvXGBsVpca) %>% mutate(model = "XGB")
 cvPcaAllxgbFilt <- cvPcaAllxgb %>% filter(dim=="50"|dim=="500")
 
-plotPCAXGBvsNMFxgbDf <- rbind(cvAllxgb, cvPcaAllxgbFilt)
-pcaXGBcvBoxplot <- ggplot(cvPcaAllxgb, aes(x = as.factor(dim), y = mean, fill = model))+
-  geom_boxplot(show.legend = F)+
-  scale_fill_manual(values= c("#8491B4B2"))+
-  labs(x="Number of PCA dimensions", y="Cross-validation AUC")+#, fill= "Model") +
-  theme(axis.ticks.x = element_blank(), 
-        axis.text.x = element_text(angle = 30), legend.position = "none")+
-  theme_cowplot(font_size = 22, line_size = 0.4)+
-  #theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA))+
-  facet_wrap(~"XGB")+
-  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
-        strip.background = element_rect(color = "black", size = 0.4))
-pcaXGBcvBoxplot
-ggsave("output/pcaXGBcvBP.png", pcaXGBcvBoxplot, width = 7, height = 5)
+# plotPCAXGBvsNMFxgbDf <- rbind(cvAllxgb, cvPcaAllxgbFilt)
+# pcaXGBcvBoxplot <- ggplot(cvPcaAllxgb, aes(x = as.factor(dim), y = mean, fill = model))+
+#   geom_boxplot(show.legend = F)+
+#   scale_fill_manual(values= c("#8491B4B2"))+
+#   labs(x="Number of PCA dimensions", y="Cross-validation AUC")+#, fill= "Model") +
+#   theme(axis.ticks.x = element_blank(), 
+#         axis.text.x = element_text(angle = 30), legend.position = "none")+
+#   theme_cowplot(font_size = 22, line_size = 0.4)+
+#   #theme(panel.background = element_rect(colour = "black", size=0.5, fill=NA))+
+#   facet_wrap(~"XGB")+
+#   theme(panel.border = element_rect(color = "black", fill = NA, size = 0.4), 
+#         strip.background = element_rect(color = "black", size = 0.4))
+# pcaXGBcvBoxplot
+# ggsave("output/pcaXGBcvBP.png", pcaXGBcvBoxplot, width = 7, height = 5)
 
 # instead let's just compare the NMF AND PCA XGB results:
 pcaVSnmfXgbBoxplot <- ggplot(plotPCAXGBvsNMFxgbDf, aes(x = as.factor(dim), y = mean, fill = Algorithm))+
@@ -135,7 +139,8 @@ pcaVSnmfXgbBoxplot <- ggplot(plotPCAXGBvsNMFxgbDf, aes(x = as.factor(dim), y = m
         legend.position = "bottom")
 
 pcaVSnmfXgbBoxplot
-ggsave("output/pcaVSnmfXgbBoxplot.png", pcaVSnmfXgbBoxplot ,width = 8, height = 6)
+ggsave("output/pcaVSnmfXgbBoxplot.png", pcaVSnmfXgbBoxplot ,width = 7, height = 5)
+saveRDS(pcaVSnmfXgbBoxplot, "output/p2_pcaVsNmf.rds")
 cvpcaXGBMetr <- lapply(pcaXGBResList, function(x){
   r <- x$resDf
   maxAuc <- as.data.frame(r[which.max(r$mean),])
@@ -145,7 +150,12 @@ maxPCAaucAllDims <- do.call("rbind", cvpcaXGBMetr)%>%
 # ok so we can see that the PCA feature sets when an xgb model is trained
 # on them they give poorer performance than the NMF feature sets
 
-#############--
+threePlots <- plot_grid(nmfRFcvBP, bestDimsRFvsXGBbplot, pcaVSnmfXgbBoxplot, ncol=2, align = 'v', labels = "auto")
+threePlots
+ggsave("output/threeBoxplotsCVmetr.png", test, width = 10, height = 10)
+
+
+#############--held out test set ############
 predictionsAllRf <- lapply(nmfRfSVResList, function(x){
   x$aug
 })
@@ -206,6 +216,7 @@ noNetworkROCcurveRF <-ggplot(rfMetrics, aes(x=1-specificity, y=sensitivity, colo
 
 noNetworkROCcurveRF
 ggsave("output/nonetworkROCcurveRF.png", noNetworkROCcurveRF, width = 12, height = 8)
+
 
 
 rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
@@ -461,6 +472,9 @@ unlabelledGenesWithHPOannot$significant <-as.factor(unlabelledGenesWithHPOannot$
 #cool looks good i guess
 hpoCurve <- roc_curve(unlabelledGenesWithHPOannot, truth = significant, .pred_TRUE)
 hpoCurve <- hpoCurve %>% mutate(database = "HPO")
+rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
+rocaucHPO <- rocaucHPO %>% mutate(database = "HPO")
+rocaucHPO
 
 hpoMgi <- rbind(hpoCurve, mgiCurve)
 #let's plot mgi and hpo now
@@ -484,9 +498,7 @@ ggsave("output/ROCmgihpo.png", mgihpoROC, width = 8, height = 4.5)
   #theme_minimal_grid(font_size = 17)
   #theme_bw(base_size = 20)
 #w what is the area under curve???????????
-rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
-rocaucHPO <- rocaucHPO %>% mutate(database = "HPO")
-rocaucHPO
+
 
 ## part 4? what are the top rankeed genes?
 
@@ -498,4 +510,13 @@ top20genesWsymbs <- merge(top20genes, humanGenesSymbs, by=0)
 rownames(top20genesWsymbs) <- top20genesWsymbs$hgnc_symbol; top20genesWsymbs$Row.names <-NULL; top20genesWsymbs$hgnc_symbol<-NULL
 top20genesWsymbs <- top20genesWsymbs[order(top20genesWsymbs$.pred_TRUE, decreasing = T),]
 ## can save it if you like...
-write.table(as.data.frame(top20genesWsymbs[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
+# write.table(as.data.frame(top20genesWsymbs[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
+
+
+
+
+# how about shuffled data?
+shuffledResXGB <- readRDS("processed/NMFxgbResSVshuffled_200.rds")
+shuffledResXGB$AUC
+#0.503
+shuffledResXGB$roc_curve
