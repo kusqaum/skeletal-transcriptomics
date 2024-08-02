@@ -4,8 +4,9 @@ library(themis)
 library(vip)
 library(doParallel)
 library(foreach)
+library(RColorBrewer)
 
-
+##### read in data sets####
 networkAlone <- readRDS("processed/processedNetworkEmb.rds")
 networkAloneLabelled <- readRDS("processed/processedNetworkEmbLabelled.rds")
 sVwithNetworkLabelled <- readRDS("processed/SVwithNetworkLabelled.rds")
@@ -14,6 +15,7 @@ labelsAlone <- sVwithNetworkLabelled[[1]] %>% select(significant)
 
 head(sVwithNetworkLabelled[[1]][1:5,1:5])
 dim(sVwithNetworkLabelled[[1]])
+#### split data and create preprocessing rec ####
 #function for preprocessing
 split_processingData_fctn <- function(data, proportion){
   set.seed(123)
@@ -537,7 +539,12 @@ nmfNetworkdim500Res <- randForest_fctnWithNetwork(sVwithNetworkSplit[[7]], algor
 # print("xgb on network data alone")
 # netRes <- xgboost_fctnNetwork(networkAloneSplit ,algorithm = "none")
 
-
+#-------------------------------------------------------------------------------------------
+# read in the results of network alone!
+networkOnlyXGBres <- readRDS("processed/xgbResNetworkOnly_500.rds")
+networkOnlyXGBres$AUC
+#0.515
+networkOnlyXGBres$roc_curve
 
 ###read in the results of tissue network
 rfNetworkPlusSVnmfFiles <- list.files("processed", full.names = T, pattern = "ResNetworkWithSV_")
@@ -564,6 +571,15 @@ networkSVcvBP <- ggplot(networkandNoNetwork, aes(x= as.factor(dim), y = mean, fi
         legend.position = "bottom")
 networkSVcvBP
 
+p1 <- readRDS("output/p1_RFvsXGB.rds")
+p2 <- readRDS("output/p2_pcaVsNmf.rds")
+
+bot <- plot_grid(p1,p2, labels = c("b","c"), label_size = 16)
+bot
+# allp <- plot_grid(networkSVcvBP / (p1+p2), labels = "auto", label_size = 20)
+allp <- plot_grid(networkSVcvBP, bot, ncol = 1, labels = "auto", label_size = 16)
+allp
+ggsave("output/allp.png", allp, height = 10, width = 11)
 #
 #
 cvRfMetrNET_SV <- lapply(rfNetworkPlusSVnmfResList, function(x){
@@ -592,28 +608,31 @@ dimens <- lapply(rfNetworkPlusSVnmfResList, function(x){
   x$dim
 })
 dimens <- unlist(dimens)
-dfAUCwNet_text <- data.frame(dim = dimens, auc = dfAUCwNet$auc_scores, Algorithm = "NMF")
+dfAUCwNet_text <- data.frame(dim = dimens, 
+                             auc = dfAUCwNet$auc_scores, Algorithm = "NMF")
 rfSVWithNetpredictionsMetr <- bind_rows(predSVWithNet) %>%
   group_by(dim) %>%
-  roc_curve(truth = significant, .pred_FALSE)
+  roc_curve(truth = significant, .pred_TRUE, event_level = "second") %>%
+  mutate(alg = paste(dim, "NMF dimensions"))
 
-
-ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
+str(rfSVWithNetpredictionsMetr$alg)
+alg <- "NMF dimensions"
+svWnetROCrf <- ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
   geom_line(linewidth=1.5, show.legend = F)+ 
   geom_abline(slope = 1, intercept = 0, linewidth=0.4, lty="dashed", alpha = 0.5)+
-  
   theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
         aspect.ratio = 1, legend.position="none")+
-  theme_bw(base_size = 20)+# theme(legend.position = "none")+
+  theme_minimal_grid(font_size = 30)+# theme(legend.position = "none")+
   scale_colour_npg()+
-  facet_wrap(~ paste0(dim, " NMF dimensions"))+ 
-  theme(strip.text = element_text(size=20), legend.position = "none")+
+  # facet_wrap(~ paste0(dim, " NMF dimensions"))+
+  facet_wrap(~ factor(paste0(dim, " NMF dimensions"), c("50 NMF dimensions", "100 NMF dimensions","150 NMF dimensions",
+                                                        "200 NMF dimensions", "500 NMF dimensions")))+
+  theme(strip.text = element_text(size=32), legend.position = "none")+
   geom_text(data = dfAUCwNet_text, mapping = aes(x=0.3, y=0.85, label = paste0("AUC = ", round(auc, 3))), 
-            size=8)
+            size=12)
 
-
-
-
+svWnetROCrf
+ggsave("output/SVnetworkROCcurveRF.png", svWnetROCrf, width = 20, height = 12)
 
 
 posBestFitNet <- which.max(dfAUCwNet_text$auc)
@@ -630,7 +649,7 @@ dim(bestDfwNet)
 bestFitNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$finalFit
 bestFitNet
 
-correctRdf <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$dfForCorrectR
+correctRdfBestDimNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$dfForCorrectR
 
 bestModMetricsNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$resDf
 finalModMetricsNet <- bestModMetricsNet[which.max(bestModMetricsNet$mean),]
@@ -668,7 +687,9 @@ all(rownames(top5FeatsModeldfNet)== rownames(labelsAlone))
 #they're in order so can just do cbind
 top5FeatsModeldfLabelledNet <- cbind(top5FeatsModeldfNet, labelsAlone)
 
-
+# df <- top5FeatsModeldfLabelledNet[order(top5FeatsModeldfLabelledNet$Feature76, decreasing = T),]
+# ggplot(df[1:15,], aes(x=significant, y = Feature76))+
+#   geom_boxplot()
 
 for (m in 1:(ncol(top5FeatsModeldfLabelledNet)-1)) {
   #print(m)
@@ -684,7 +705,7 @@ for (m in 1:(ncol(top5FeatsModeldfLabelledNet)-1)) {
     scale_fill_manual(values = c("#69BE28B2", "#E37222B2"))+ 
     scale_x_discrete(labels = c("Associated", "Not associated"))+
     theme(legend.position = "none")
-  ggsave(paste0("output/", n,".png"), p, height = 3, width = 4)
+  # ggsave(paste0("output/", n,".png"), p, height = 3, width = 4)
   print(n)
   print(p)
 }
@@ -695,24 +716,33 @@ for (m in 1:(ncol(top5FeatsModeldfLabelledNet)-1)) {
 
 top5FeatsModeldfNet <- top5FeatsModeldfNet %>% arrange(desc(Feature76))
 hGenesSymbs <- read.table("processed/human_coding_genes.txt", sep = "\t", header = T)
-hGenesSymbs <- hGenesSymbs%>% filter(hgnc_symbol!=""); rownames(hGenesSymbs) <- hGenesSymbs$ensembl_gene_id
+hGenesSymbs <- hGenesSymbs %>% 
+  filter(hgnc_symbol!=""); rownames(hGenesSymbs) <- hGenesSymbs$ensembl_gene_id
 hGenesSymbs$ensembl_gene_id <-NULL
 head(hGenesSymbs) 
 # so now gonna merge with top feats DF
 head(top5FeatsModeldfLabelledNet)
 topFeatsMapped <- merge(top5FeatsModeldfNet, hGenesSymbs, by=0); rownames(topFeatsMapped) <- topFeatsMapped$hgnc_symbol; topFeatsMapped$Row.names<-NULL; topFeatsMapped$hgnc_symbol <-NULL
 head(topFeatsMapped)
+topFeatsMapped <- topFeatsMapped %>% arrange(desc(Feature76))
 
 matN <- as.matrix(topFeatsMapped)
 head(matN)
 matN <- apply(matN, 2, rank)
 head(matN)
-heatmapN <- pheatmap::pheatmap(matN[1:20,], border_color = "white",
+brewer.pal.info
+heatmapN <- pheatmap::pheatmap(matN[1:15,], border_color = "white",
                               cluster_rows = F, 
-                              cluster_cols = F, show_rownames = T, 
+                              cluster_cols = F, 
+                              show_rownames = T, 
+                              fontsize = 20, 
+                              color = brewer.pal(8, "Reds")
+                              
 )
 
-
+heatmapN
+ggsave("output/heatmap.png", heatmapN, width = 10, height = 12)
+ggsave("output/heatmap.png", heatmapN, width = 11, height = 6)
 
 ####clusterprofiler code####
 
@@ -751,11 +781,13 @@ length(which(unlabelledGenesPreddfNet$.pred_class!= "TRUE"))
 
 
 ########
-unlabelledGenesPreddf <- unlabelledGenesPreddfNet
-head(unlabelledGenesPreddf[1:4,1:5])
+
+head(unlabelledGenesPreddfNet[1:4,1:5])
 mgiGenes <- read.table("processed/annotatedMGIgenes.txt", header = T, sep = "\t")
+dim(mgiGenes)
 #just remove duplicates since they're all the same level anyways
 mgiGenes <- mgiGenes %>% distinct(ensembl_gene_id, .keep_all = T)
+dim(mgiGenes)
 str(mgiGenes$ensembl_gene_id)
 # make gene names rownames
 rownames(mgiGenes)<- mgiGenes$ensembl_gene_id ; mgiGenes$ensembl_gene_id<-NULL
@@ -764,12 +796,12 @@ mgiGenes$significant<- as.factor(mgiGenes$significant)
 head(unlabelledGenes[1:3,1:5])
 # let's just get the genes in both datasets
 
-length(which(rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes)))
-# so 1001 of the mgi genes are known to be associated to a skeletal phenotype
-nrow(unlabelledGenesPreddf) - (length(which(rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes))))
-# and 8000 genes are unstudied
+length(which(rownames(unlabelledGenesPreddfNet) %in% rownames(mgiGenes)))
+# so 882 of the mgi genes are known to be associated to a skeletal phenotype
+nrow(unlabelledGenesPreddfNet) - (length(which(rownames(unlabelledGenesPreddfNet) %in% rownames(mgiGenes))))
+# and 8119 genes are unstudied
 #which are those genes then? that aren't in the mgi genes (i.e., unstudied)
-totallyUnstudied <- rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(mgiGenes)]
+totallyUnstudied <- rownames(unlabelledGenesPreddfNet)[!rownames(unlabelledGenesPreddfNet) %in% rownames(mgiGenes)]
 class(totallyUnstudied)
 length(totallyUnstudied)
 
@@ -782,19 +814,21 @@ nrow(unstudied)
 nrow(mgiGenes) # cool
 mgiGenesPlusUnstudied <- rbind(mgiGenes, unstudied)
 # now let's retain only those genes in mgiGenesplus unstudied DF that are also in our unstudied/unlabelled genes
-unlabelledGenesWithMGIannot <- merge(unlabelledGenesPreddf,mgiGenesPlusUnstudied, by=0); rownames(unlabelledGenesWithMGIannot)<- unlabelledGenesWithMGIannot$Row.names; unlabelledGenesWithMGIannot$Row.names<- NULL
+unlabelledGenesWithMGIannot <- merge(unlabelledGenesPreddfNet,mgiGenesPlusUnstudied, by=0); rownames(unlabelledGenesWithMGIannot)<- unlabelledGenesWithMGIannot$Row.names; unlabelledGenesWithMGIannot$Row.names<- NULL
 # cool
 head(unlabelledGenesWithMGIannot[1:3,1:3])
+dim(unlabelledGenesWithMGIannot)
 
+# unlabelledGenesWithMGIannotTEST <- unlabelledGenesWithMGIannot
+# unlabelledGenesWithMGIannotTEST$significant <- unlabelledGenesWithMGIannotTEST$.pred_class
+mgiCurve <-roc_curve(unlabelledGenesWithMGIannot, truth = significant, .pred_FALSE)
 
-mgiCurve <-roc_curve(unlabelledGenesWithMGIannot, truth = significant, .pred_TRUE,
-                     event_level = "first")
 head(mgiCurve)
 mgiCurve <- mgiCurve %>% mutate(database = "MGI")
 head(mgiCurve)
-rocaucMGI <- roc_auc(unlabelledGenesWithMGIannot, significant, .pred_TRUE)
+rocaucMGI <- roc_auc(unlabelledGenesWithMGIannot, truth = significant, .pred_FALSE)
 rocaucMGI <- rocaucMGI %>% mutate(database = "MGI")
-
+autoplot(mgiCurve)
 
 # now looking at human phenotype ontology- genes that are annotated to a skeletal abnormality
 # lets quickly do this 
@@ -804,11 +838,11 @@ length(unique(hpOnt$ensembl_gene_id))
 
 rownames(hpOnt)<- hpOnt$ensembl_gene_id; hpOnt$ensembl_gene_id<-NULL
 hpOnt$significant <- as.factor(hpOnt$significant)
-length(which(rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)))
+length(which(rownames(unlabelledGenesPreddfNet) %in% rownames(hpOnt)))
 # we have 1415 genes that are unlabelled (unstudied in impc) to be known to have skel phenotype according to hpo
-length(rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)])
+length(rownames(unlabelledGenesPreddfNet)[!rownames(unlabelledGenesPreddfNet) %in% rownames(hpOnt)])
 # the remainder of these 7586genes^ are not known to have a skeletal abnormality in the human phenotype ont
-unstGene <- rownames(unlabelledGenesPreddf)[!rownames(unlabelledGenesPreddf) %in% rownames(hpOnt)]
+unstGene <- rownames(unlabelledGenesPreddfNet)[!rownames(unlabelledGenesPreddfNet) %in% rownames(hpOnt)]
 # so lets get all their gene names and make them as a dataframe and call them false (i.e., not associated with a phenotype)
 unstGeneDf <- data.frame(significant = rep(c("FALSE"), times = length(unstGene)), row.names = unstGene)
 head(unstGeneDf)
@@ -823,13 +857,13 @@ hpoGenesPlusUnstudied <- rbind(hpOnt, unstGeneDf)
 head(hpoGenesPlusUnstudied)
 dim(hpoGenesPlusUnstudied)
 
-unlabelledGenesWithHPOannot <- merge(unlabelledGenesPreddf, hpoGenesPlusUnstudied, by= 0); rownames(unlabelledGenesWithHPOannot) <- unlabelledGenesWithHPOannot$Row.names; unlabelledGenesWithHPOannot$Row.names <- NULL
+unlabelledGenesWithHPOannot <- merge(unlabelledGenesPreddfNet, hpoGenesPlusUnstudied, by= 0); rownames(unlabelledGenesWithHPOannot) <- unlabelledGenesWithHPOannot$Row.names; unlabelledGenesWithHPOannot$Row.names <- NULL
 head(unlabelledGenesWithHPOannot[1:3,1:5])
 unlabelledGenesWithHPOannot$significant <-as.factor(unlabelledGenesWithHPOannot$significant)
 #cool looks good i guess
-hpoCurve <- roc_curve(unlabelledGenesWithHPOannot, truth = significant, .pred_TRUE)
+hpoCurve <- roc_curve(unlabelledGenesWithHPOannot, truth = significant, .pred_FALSE)
 hpoCurve <- hpoCurve %>% mutate(database = "HPO")
-rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_TRUE)
+rocaucHPO <- roc_auc(unlabelledGenesWithHPOannot, significant, .pred_FALSE)
 rocaucHPO <- rocaucHPO %>% mutate(database = "HPO")
 rocaucHPO
 
@@ -853,12 +887,16 @@ mgihpoROC
 
 
 
-####
+#### which are the top ranked genes?
 
-orderedGenesNet <- unlabelledGenesPreddf[order(unlabelledGenesPreddf$.pred_TRUE, decreasing = T),]
+orderedGenesNet <- unlabelledGenesPreddfNet[order(unlabelledGenesPreddfNet$.pred_FALSE, decreasing = T),]
 top20genesNet <- orderedGenesNet[1:20,]
 top20genesWsymbsNet <- merge(top20genesNet, hGenesSymbs, by=0)
 rownames(top20genesWsymbsNet) <- top20genesWsymbsNet$hgnc_symbol; top20genesWsymbsNet$Row.names <-NULL; top20genesWsymbsNet$hgnc_symbol<-NULL
 top20genesWsymbsNet <- top20genesWsymbsNet[order(top20genesWsymbsNet$.pred_TRUE, decreasing = T),]
+head(top20genesWsymbsNet[1:3,1:6])
+# rearrange again cause not in order
+top20genesWsymbsNet <- top20genesWsymbsNet[order(top20genesWsymbsNet$.pred_FALSE, decreasing = T),]
+head(top20genesWsymbsNet[16:20,1:5])
 ## can save it if you like...
 write.table(as.data.frame(top20genesWsymbsNet[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
