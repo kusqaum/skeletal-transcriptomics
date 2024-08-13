@@ -1,3 +1,8 @@
+library(tidymodels)
+library(RColorBrewer)
+library(tidyverse)
+library(pheatmap)
+
 # read in the results of network alone!
 networkOnlyXGBres <- readRDS("processed/xgbResNetworkOnly_500.rds")
 networkOnlyXGBres$AUC
@@ -183,10 +188,11 @@ head(top5FeatsModeldfLabelledNet)
 topFeatsMapped <- merge(top5FeatsModeldfNet, hGenesSymbs, by=0); rownames(topFeatsMapped) <- topFeatsMapped$hgnc_symbol; topFeatsMapped$Row.names<-NULL; topFeatsMapped$hgnc_symbol <-NULL
 head(topFeatsMapped)
 topFeatsMapped <- topFeatsMapped %>% arrange(desc(Feature76))
-
+?rank
 matN <- as.matrix(topFeatsMapped)
 head(matN)
-matN <- apply(matN, 2, rank)
+
+matN <- apply(-matN, 2, rank)
 head(matN)
 brewer.pal.info
 heatmapN <- pheatmap::pheatmap(matN[1:15,], border_color = "white",
@@ -194,8 +200,10 @@ heatmapN <- pheatmap::pheatmap(matN[1:15,], border_color = "white",
                                cluster_cols = F, 
                                show_rownames = T, 
                                fontsize = 20, 
-                               color = brewer.pal(8, "Reds")
-                               
+                               color = rev(brewer.pal(8, "Reds")),
+                               display_numbers = T, 
+                               number_format = "%.0f", 
+                               number_color = "black"
 )
 
 heatmapN
