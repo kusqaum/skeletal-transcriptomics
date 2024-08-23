@@ -130,7 +130,7 @@ str(rfSVWithNetpredictionsMetr$alg)
 alg <- "NMF dimensions"
 svWnetROCrf <- ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
   geom_line(linewidth=1.5, show.legend = F)+ 
-  geom_abline(slope = 1, intercept = 0, linewidth=0.7, lty="dashed", alpha = 0.7)+
+  geom_abline(slope = 1, intercept = 0, linewidth=0.7, lty="dashed", alpha = 0.8)+
   theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
         aspect.ratio = 1, legend.position="none")+
   theme_minimal_grid(font_size = 30)+# theme(legend.position = "none")+
@@ -138,7 +138,9 @@ svWnetROCrf <- ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensiti
   # facet_wrap(~ paste0(dim, " NMF dimensions"))+
   facet_wrap(~ factor(paste0(dim, " NMF dimensions"), c("50 NMF dimensions", "100 NMF dimensions","150 NMF dimensions",
                                                         "200 NMF dimensions", "500 NMF dimensions")))+
-  theme(strip.text = element_text(size=32), legend.position = "none")+
+  theme(strip.text = element_text(size=32), legend.position = "none", 
+        #this allowed me to increase text size of x and y axes labels!
+        text = element_text(size = 48))+
   geom_text(data = dfAUCwNet_text, mapping = aes(x=0.3, y=0.85, label = paste0("AUC = ", round(auc, 3))), 
             size=12)
 
