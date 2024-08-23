@@ -52,9 +52,9 @@ cvRFNetSV <- lapply(rfNetworkPlusSVnmfResList, function(x){
 })
 #nonnetwork for comparison
 cvNonetwork <- readRDS("processed/cvAllRf_noNetworkRes.rds")
-cvNonetwork <- cvNonetwork %>% mutate(Feature = "SkeletalVis only")
+cvNonetwork <- cvNonetwork %>% mutate(Feature = "gene expression only")
 
-cvNetSv <- do.call("rbind", cvRFNetSV) %>% mutate(model = "RF", Feature = "SkeletalVis With network")
+cvNetSv <- do.call("rbind", cvRFNetSV) %>% mutate(model = "RF", Feature = "gene expression with network")
 networkandNoNetwork <- bind_rows(cvNonetwork, cvNetSv)
 networkSVcvBP <- ggplot(networkandNoNetwork, aes(x= as.factor(dim), y = mean, fill=Feature)) +
   geom_boxplot()+
@@ -64,19 +64,34 @@ networkSVcvBP <- ggplot(networkandNoNetwork, aes(x= as.factor(dim), y = mean, fi
   facet_wrap(~"RF")+
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4), 
         strip.background = element_rect(color = "black",  linewidth = 0.4),
-        legend.position = "bottom")
-networkSVcvBP
+        legend.position = "bottom")+
+  ggtitle("Tuning NMF dimension size with RF")+
+  theme(plot.title = element_text(size = 16))
+  # ggtitle(expression(atop(italic("Tuning NMF dimension size with RF"))))
+#networkSVcvBP
 
 p1 <- readRDS("output/p1_RFvsXGB.rds")
+p1 <- p1 +
+  #ggtitle(expression(atop(italic(""))))
+  ggtitle("Comparing RF and XGB")+
+  theme(plot.title = element_text(size = 16))
+p1
 p2 <- readRDS("output/p2_pcaVsNmf.rds")
-
-bot <- plot_grid(p1,p2, labels = c("b","c"), label_size = 16)
+p2 <- p2 +
+  ggtitle("Comparing NMF and PCA")+
+  #ggtitle(expression(atop(italic("Comparing NMF and PCA"))))+
+  theme(plot.title = element_text(size = 16))
+p2
+bot <- plot_grid(p1,p2, labels = c("b","c"), label_size = 20)
 bot
 # allp <- plot_grid(networkSVcvBP / (p1+p2), labels = "auto", label_size = 20)
-allp <- plot_grid(networkSVcvBP, bot, ncol = 1, labels = "auto", label_size = 16)
+allp <- plot_grid(networkSVcvBP, bot, ncol = 1, labels = "auto", label_size = 20)
 allp
-ggsave("output/allp.png", allp, height = 10, width = 11)
+#ggsave("output/allp.png", allp, height = 10, width = 11)
 #
+#ggsave("output/allp2.png", allp, height = 10, width = 11)
+ggsave("output/allp3.png", allp, height = 10, width = 11)
+
 #
 cvRfMetrNET_SV <- lapply(rfNetworkPlusSVnmfResList, function(x){
   r <- x$resDf
@@ -115,7 +130,7 @@ str(rfSVWithNetpredictionsMetr$alg)
 alg <- "NMF dimensions"
 svWnetROCrf <- ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
   geom_line(linewidth=1.5, show.legend = F)+ 
-  geom_abline(slope = 1, intercept = 0, linewidth=0.4, lty="dashed", alpha = 0.5)+
+  geom_abline(slope = 1, intercept = 0, linewidth=0.7, lty="dashed", alpha = 0.7)+
   theme(panel.border = element_rect(colour = "black", linewidth = 1.0, fill="white"),
         aspect.ratio = 1, legend.position="none")+
   theme_minimal_grid(font_size = 30)+# theme(legend.position = "none")+
@@ -226,28 +241,28 @@ head(topFeatsMapped)
 ?rank
 matN <- as.matrix(topFeatsMapped)
 head(matN)
-
+nrow <- 15
 matN <- apply(-matN, 2, rank)
 italicNames <- lapply(
-  rownames(matN[1:15,]), function(x) bquote(italic(.(x)))
+  rownames(matN[1:nrow,]), function(x) bquote(italic(.(x)))
 )
 
 head(matN)
 brewer.pal.info
-heatmapN <- pheatmap::pheatmap(matN[1:15,], border_color = "white",
+heatmapN <- pheatmap::pheatmap(matN[1:nrow,], border_color = "white",
                                cluster_rows = F, 
                                cluster_cols = F, 
                                show_rownames = T, 
                                fontsize = 20, 
                                color = rev(brewer.pal(8, "Reds")),
-                               display_numbers = T, 
+                               display_numbers = T,
                                number_format = "%.0f", 
-                               number_color = "black", 
+                               number_color = "black",
+                               fontsize_number = 22,
                                labels_row = as.expression(italicNames)
 )
 
 heatmapN
-ggsave("output/heatmap.png", heatmapN, width = 10, height = 12)
 ggsave("output/heatmap.png", heatmapN, width = 11, height = 6)
 
 ####clusterprofiler code####
@@ -288,7 +303,7 @@ length(which(unlabelledGenesPreddfNet$.pred_class=="TRUE")) # 1059
 length(which(unlabelledGenesPreddfNet$.pred_class!= "TRUE")) # 7942
 
 
-########
+########external validation using MGI and HPO
 
 head(unlabelledGenesPreddfNet[1:4,1:5])
 mgiGenes <- read.table("processed/annotatedMGIgenes.txt", header = T, sep = "\t")
@@ -417,3 +432,7 @@ mgiHPhen <- read.table("processed/mgiHumanPhenotype.txt", header = T, sep = "\t"
 # s
 great <- mgiHPhen[mgiHPhen[,1]%in% rownames(top20genesWsymbsNet),]
 great
+
+# what is the number of genes overlapping in both databases???????????
+commonHPOMGI <- intersect(rownames(hpOnt), rownames(mgiGenes))
+length(commonHPOMGI)
