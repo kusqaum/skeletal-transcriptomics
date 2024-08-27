@@ -1,25 +1,35 @@
-# Example README
+# Supervised machine learning to prioritise skeletal disease-associated genes using transcriptomics data
 
 
-This is provided as a rough guide only. Some sections are suggestions, or else would only truly be necessary in the event of a project handover. Fill in / delete as appropriate.
-
-Your first task is to rename the parent directory (currently ProjectFolder) to something which is clearly identifiable as your project.
-
-All of the directory titles are also suggestions. Though the overall structure follows what we consider best practice, there is room for tweaks. I.e. perhaps the output folders tables or figures should be found in the parent directory and output should be removed. Else directories may be numbered (i.e. 01_install, 02_raw) to keep in the preferred order. There may also be project-specific directory structures required. 
-
-Similarly, markdowns/Jupyter notebooks/scripts/quarto markdowns should be numbered in the order that they are needed in the analysis.
 
 ## Overview
 
-Provide some details regarding what the project is, perhaps touching on the biological context. Providing some keywords (i.e. RNA-Seq, biomarkers, proteomics) may suffice.
+RNA-Seq, machine learning, skeletal diseases
 
 ## Installation
 
-Installation directions pertaining to scripts/resources provided in the `install` directory.
+install necessary R packages from the `install` directory.
 
 ## Directions
 
-Instructions as to how to run the project.
+01_geneExpression.R - processing of skeletal tissue-specific gene expression data
 
-Ideally there should be a master script/.rmd/.qmd/.R that can run the anlaysis from start to finish in the home directory. Details may be provided there.
+02_exploratoryDataVisualisation.R - principal componet analysis and non-negative matrix factorisation of the processed gene expression data
+
+03_modelTraining.R - train random forest and gradient boosted trees to predict skeletal disease-associated genes
+
+04_modelInterpretation.R - identify model's most important features and most informative genes
+
+05_positiveControlGTEX.R - train gradient boosted trees to predict mortality/aging-associated genes (positive control)
+
+06_gtexPredictPhenotype.R - use GTEX gene expression data to predict skeletal disease-associated genes
+
+07_networkProcessing.R - process human protein-protein interaction network
+
+08_integrateNetwork.R - create tissue-specific network from expression data
+
+09_trainTissueNetwork.R - train random forest and gradient boosted trees on network
+
+10_tissueNetworkModelInterpretation.R - identify final model's most important features from tissue-specific network 
+
 
