@@ -1,3 +1,3 @@
-# RAW DATA
+# PROCESSED DATA
 
-This directory contains raw data (when available / permitted).
+Processed data are kept in this directory.
