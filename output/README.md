@@ -1,6 +1,3 @@
-# OUTPUT / DATA / RESULTS
+# OUTPUT
 
-Can name this directory dependent on preference/the specific output of a project.
-Similarly, subdirectories can be put in the parent directory.
-
-Use the README to provide an overview of what results/output are present and where they can be found.
+Output contains all figures generated. Figures include ROC curves, boxplots of cross-validation metrics, heatmap representation of final model's most important features
