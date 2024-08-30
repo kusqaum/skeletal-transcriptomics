@@ -1,5 +1,5 @@
 # INSTALL
 
-Any installation scripts live here.
+Contains installation scripts for necessary R packages.
 
-Use this space to provide concise installation instructions if deemed necessary.
+
