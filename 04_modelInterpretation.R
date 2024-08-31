@@ -35,17 +35,30 @@ xgbResList <- lapply(xgboostFileNames, readRDS)
 xgbResList <- xgbResList[order(sapply(xgbResList, function(x) x$dim))]
 
 length(xgbResList)
+dim50nmfresXGB <- xgbResList[[1]]
+dim50_nmfXGBcr<- dim50nmfresXGB$dfForCorrectR %>%
+  mutate(model = "NMF")
 # so let's read in the PCA feature sets 
 
 pcaXGBfileNames <- list.files("processed", full.names = T, pattern = "PCAxgbRes_")
 length(pcaXGBfileNames)
 pcaXGBResList <- lapply(pcaXGBfileNames, readRDS)
-pcaXGBResList <- pcaXGBResList[order(sapply(xgbResList, function(x) x$dim))]
+length(pcaXGBResList)
+pcaXGBResList <- pcaXGBResList[order(sapply(pcaXGBResList, function(x) x$dim))]
 length(pcaXGBResList)
 
+#let's do the corrected repeated k cv test
+dim50PCAres <- pcaXGBResList[[1]]
+dim50_PCAcr <- dim50PCAres$dfForCorrectR%>%
+  mutate(model = "PCA")
+tesNMFvsPCAxgb <- rbind(dim50_PCAcr, dim50_nmfXGBcr)
+pcaVSnmf_xgb <- repkfold_ttest(tesNMFvsPCAxgb, n1=80, n2=20, k = 5, r = 3)
+pcaVSnmf_xgb
+# get all cv metrics for nmf rf
 cvRFSV <- lapply(nmfRfSVResList, function(x){
   x$resDf
 })
+# get all cv metrics for xgb 
 cvXGBsV <- lapply(xgbResList, function(x){
   x$resDf
 })
@@ -53,6 +66,7 @@ cvAllrf <- do.call("rbind", cvRFSV) %>% mutate(model = "RF")
 saveRDS(cvAllrf, "processed/cvAllRf_noNetworkRes.rds")
 cvAllxgb <- do.call("rbind", cvXGBsV) %>% mutate( model = "XGB")
 #cvRfandXGB <- bind_rows(cvAll, cvAllxgb)
+#make the boxplot of the cv metrics for RF on NMF gene expressiononly
 nmfRFcvBP <- ggplot(cvAllrf, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values = c("#4DBBD5B2"))+
@@ -66,6 +80,7 @@ nmfRFcvBP
 ggsave("output/nmfRFcvBP.png", nmfRFcvBP, width = 7, height = 5)
 head(cvAllrf)
 dim(cvAllrf)
+#extract 50a and 500 dim since they were highest performing models
 cvRFFilt <- cvAllrf %>% filter(dim == "50" | dim == "500")
 dim(cvRFFilt)
 # so we know which AUC the final RF model from the cross validation was as well!
@@ -85,7 +100,7 @@ maxXGBAucAllDims <- do.call("rbind", cvxgbMetr) %>%
 
 dim(cvAllxgb)
 toPlotTwoFeatSetsCV <- bind_rows(cvAllxgb, cvRFFilt)
-
+# make the boxplot for comparing XGB with RF from the NMF features (50 and 500 dimensions)
 bestDimsRFvsXGBbplot <- ggplot(toPlotTwoFeatSetsCV, aes(x= as.factor(dim), y = mean, fill=model)) +
   geom_boxplot()+
   scale_fill_manual(values =c( "#4DBBD5B2","#CD202CB2")) +
@@ -111,7 +126,8 @@ cvXGBsVpca <- lapply(pcaXGBResList, function(x){
 cvPcaAllxgb <- do.call("rbind", cvXGBsVpca) %>% mutate(model = "XGB")
 cvPcaAllxgbFilt <- cvPcaAllxgb %>% filter(dim=="50"|dim=="500")
 
-# plotPCAXGBvsNMFxgbDf <- rbind(cvAllxgb, cvPcaAllxgbFilt)
+plotPCAXGBvsNMFxgbDf <- rbind(cvAllxgb, cvPcaAllxgbFilt)
+dim(plotPCAXGBvsNMFxgbDf)
 # pcaXGBcvBoxplot <- ggplot(cvPcaAllxgb, aes(x = as.factor(dim), y = mean, fill = model))+
 #   geom_boxplot(show.legend = F)+
 #   scale_fill_manual(values= c("#8491B4B2"))+
@@ -126,7 +142,7 @@ cvPcaAllxgbFilt <- cvPcaAllxgb %>% filter(dim=="50"|dim=="500")
 # pcaXGBcvBoxplot
 # ggsave("output/pcaXGBcvBP.png", pcaXGBcvBoxplot, width = 7, height = 5)
 
-# instead let's just compare the NMF AND PCA XGB results:
+# instead of that plot let's just compare the NMF AND PCA XGB CV metrics on the gene expression:
 pcaVSnmfXgbBoxplot <- ggplot(plotPCAXGBvsNMFxgbDf, aes(x = as.factor(dim), y = mean, fill = Algorithm))+
   geom_boxplot()+
   scale_fill_manual(values= c("#CD202CB2", "#8491B4B2"))+
@@ -150,6 +166,7 @@ maxPCAaucAllDims <- do.call("rbind", cvpcaXGBMetr)%>%
 # ok so we can see that the PCA feature sets when an xgb model is trained
 # on them they give poorer performance than the NMF feature sets
 
+# let's plot them all now
 threePlots <- plot_grid(nmfRFcvBP, bestDimsRFvsXGBbplot, pcaVSnmfXgbBoxplot, ncol=2, align = 'v', labels = "auto")
 threePlots
 ggsave("output/threeBoxplotsCVmetr.png", test, width = 10, height = 10)
@@ -163,7 +180,8 @@ predictionsAllRf <- lapply(nmfRfSVResList, function(x){
 # emp <- lapply(nmfRfSVResList, function(x){
 #   list("pred" = x$aug, "AUC"= x$AUC$.estimate)
 # })
-
+# now to plot the roc curve
+#get the predictions on held out set
 predictionsXGB <- lapply(xgbResList, function(x){
   x$aug
 })
@@ -186,12 +204,13 @@ head(aucDf)
 dims <- lapply(nmfRfSVResList, function(x){
   x$dim
 })
+#mke it as a dataframe
 listDims <- unlist(dims)
 listDims
 dimension <- data.frame(dimensions = listDims, Algorithm = "NMF")
 resDf <- cbind(aucDf, dimension)
 head(resDf)
-
+# new df for text to put on plots 
 df_text <- data.frame(dim = listDims, x = 0.2, y = 0.8,
                       label = paste0("AUC = ",round(aucDf$auc_scores, 3)))
 head(df_text)
@@ -200,7 +219,7 @@ rfMetrics <- rfAllPredictions %>%
   group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE)
 
-
+# make ROC curve plot
 noNetworkROCcurveRF <-ggplot(rfMetrics, aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
   geom_line(linewidth=1.5, show.legend = F)+ 
   geom_abline(slope = 1, intercept = 0, linewidth=0.4, lty="dashed", alpha = 0.5)+
@@ -218,7 +237,7 @@ noNetworkROCcurveRF
 ggsave("output/nonetworkROCcurveRF.png", noNetworkROCcurveRF, width = 12, height = 8)
 
 
-
+# make a plot for the XGB 50 and 500 dimensions too
 rocCurveXGB <- xgbAllPred %>% group_by(dim) %>%
   roc_curve(truth = significant, .pred_FALSE) %>%
   ggplot(aes(x=1-specificity, y=sensitivity, colour=as.factor(dim)))+
@@ -236,7 +255,7 @@ rocCurveXGB
 ggsave("output/nonetworkROCcurveXGBnmf.png", rocCurveXGB, width = 7.5, height = 8)
 
 
-#finding which dimension the model that gave the highest auc score was trained on
+#finding which dimension the model that gave the highest auc score (in the test set) was trained on
 posBestFit <- which.max(resDf$auc)
 posBestFit
 bestDimension <- resDf[which.max(resDf$auc),]$dimensions
@@ -251,8 +270,8 @@ for (d in 1:length(nmfRfSVResList)){
   }
 }
 dim(bestDf)
-#find the final fit for that model
-bestFit <- nmfRfSVResList[[posBestFit]]$finalFit
+#find the final fit for that model (what were the hyperparameters)
+bestFit <- nmfRfSVResList[[posBestFit]]$finalFit 
 rfCVdf_forCR <- nmfRfSVResList[[posBestFit]]$dfForCorrectR
 # an also for that model, what was the area under the curve??/??/
 bestModMetrics <- nmfRfSVResList[[posBestFit]]$resDf
@@ -265,9 +284,11 @@ for(e in 1:length(xgbResList)){
     dfxgb <- xgbResList[[e]]$dfForCorrectR
   }
 }
+#do the corrected repeated k-fold cv test
 dfCR <-rbind(rfCVdf_forCR, dfxgb)
 testRes <- repkfold_ttest(dfCR, n1=80, n2=20, k = 5, r = 3)
-
+# anything from here downwards was the rest of the interpretation of final model's
+# features etc but now using a different model which is created in later scripts
 #lets look at the variable importance
 bestModVarImport <- nmfRfSVResList[[posBestFit]]$importanceDf
 nmfRfSVResList[[posBestFit]]$importancePlot
@@ -280,16 +301,7 @@ dim(bestModVarImport)
 top5Feats <- bestModVarImport[1:5,]
 fiveVars <- top5Feats$Variable
 
-#subset for the ones that are positive sign
-# impFeats <- bestModVarImport %>% filter(sign=="positive")
-# head(impFeats)
-# dim(impFeats)
-# #then extract the variables that contribute to model's predictions
-# modelFeats <- impFeats$Variable
-# #find those features 
-# modelFeatsDf <- bestDf %>% dplyr::select(all_of(modelFeats))# these are gonna be input for GSEA 
-# colnames(modelFeatsDf) <- sub('V', 'Feature', colnames(modelFeatsDf))
-# head(modelFeatsDf)
+
 top5FeatsModeldf <- bestDf %>% dplyr::select(all_of(fiveVars))
 head(top5FeatsModeldf)
 colnames(top5FeatsModeldf)<- sub("V", "Feature", colnames(top5FeatsModeldf))
@@ -303,7 +315,9 @@ all(rownames(top5FeatsModeldf)%in% rownames(labelsFullDf))
 all(rownames(top5FeatsModeldf)== rownames(labelsFullDf))
 #they're in order so can just do cbind
 top5FeatsModeldfLabelled <- cbind(top5FeatsModeldf, labelsFullDf)
-# q1 <- list()
+
+# i want to see whether there is a difference in the weightings of genes that do and do not
+# contribute to a skeletal phenotype?
 for (c in 1:(ncol(top5FeatsModeldfLabelled)-1)) {
   #print(c)
   feat <- colnames(top5FeatsModeldfLabelled)[c]
@@ -323,12 +337,7 @@ for (c in 1:(ncol(top5FeatsModeldfLabelled)-1)) {
   print(pl)
   # q1[[feat]]<- pl
 }
-# l <- marrangeGrob(q1, ncol = 2,nrow = 4)
-# ggsave("output/test.pdf", l, height = 20, width = 20)
 
-# top5FeatsModeldf<- top5FeatsModeldf %>% 
-#   dplyr::mutate(TotalWeight = rowSums(top5FeatsModeldf))
-# x <- as.data.frame(top5FeatsModeldf$sum)
 
 #maybe put the top important feature in order???
 top5FeatsModeldf <- top5FeatsModeldf%>% arrange(desc(Feature272))
@@ -345,7 +354,7 @@ mat <- as.matrix(topFeatsWithSymbols)
 head(mat)
 mat <- apply(mat, 2, rank)
 head(mat)
-#pdf("processed/testFig.pdf", width = 10, height = 10)
+
 # just select the top 15 genes in the most important feature
 heatmap <- pheatmap::pheatmap(mat[1:20,], border_color = "white",
                    cluster_rows = F, 
@@ -353,7 +362,7 @@ heatmap <- pheatmap::pheatmap(mat[1:20,], border_color = "white",
                    )
 ggsave("processed/heatmap.pdf",heatmap, height = 5, width = 10)
 
-####clusterprofiler code####
+####extract each feature as a dataframe and put in a list to get ready for clusterprofiler####
 
 getEachFeature_fctn <- function(dataframeOfFeats){
   single <- list()
@@ -373,9 +382,8 @@ saveRDS(eachFeat, "processed/top5Feats.rds") # do the gsea on my laptop cause cl
 #not installing
 
 
+####let's use the final model to rank the genes that are not yet labelled (by the IMPC####)
 
-
-# ggplot(modelFeatsDf, aes(x = , y= ))+geom_
 colnames <- paste0("Feature", 1:ncol(bestDf))
 unlabelledGenes <- readRDS("processed/unStudiedGenes.rds")
 head(unlabelledGenes[1:4,1:5])
@@ -392,7 +400,7 @@ length(which(unlabelledGenesPreddf$.pred_class!= "TRUE"))
 
 
 
-
+## now use external datasets to validate the model's predictions!
 ##external validation part 3 
 #- MGI
 head(unlabelledGenesPreddf[1:4,1:5])
@@ -482,6 +490,7 @@ ext_text <- rbind(rocaucHPO, rocaucMGI)
 
 mgihpoROC <- ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)) +
   geom_path(linewidth=0.9)+
+  # for the dashed diagonal line go through origin
   geom_abline(slope = 1, intercept = 0, size=0.4, lty="dashed", alpha = 0.5)+
   theme(panel.border = element_rect(colour = "black", linewidth = 0.35, fill="white"),
         aspect.ratio = 1)+
@@ -494,14 +503,9 @@ mgihpoROC <- ggplot(hpoMgi, aes(x=1-specificity, y=sensitivity, colour=database)
 
 mgihpoROC
 ggsave("output/ROCmgihpo.png", mgihpoROC, width = 8, height = 4.5)  
- # theme_cowplot()
-  #theme_minimal_grid(font_size = 17)
-  #theme_bw(base_size = 20)
-#w what is the area under curve???????????
+ 
 
-
-## part 4? what are the top rankeed genes?
-
+## part 4? what are the top ranked genes?
 # let's see
 
 orderedGenes <- unlabelledGenesPreddf[order(unlabelledGenesPreddf$.pred_TRUE, decreasing = T),]
@@ -513,10 +517,8 @@ top20genesWsymbs <- top20genesWsymbs[order(top20genesWsymbs$.pred_TRUE, decreasi
 # write.table(as.data.frame(top20genesWsymbs[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
 
 
-
-
 # how about shuffled data?
 shuffledResXGB <- readRDS("processed/NMFxgbResSVshuffled_200.rds")
-shuffledResXGB$AUC
+shuffledResXGB$AUC # what is the AUC 
 #0.503
 shuffledResXGB$roc_curve
