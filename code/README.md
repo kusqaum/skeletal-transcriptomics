@@ -20,10 +20,10 @@ map IMPC mouse gene Ensembl identifiers to human Ensembl identifiers
 **07a_getBiogridnetwork.R**   
 read in and filter human protein-protein interactions from bioGRID to get ready for 07_networkProcessing.R script
 
-Use PecanPy to run node2vec on edge list created in 07_networkProcessing.R script
-install PecanPy with:
-`pip3.9 install pecanpy`
-run node2vec with:
+Use PecanPy to run node2vec on edge list created in 07_networkProcessing.R script   
+install PecanPy with:   
+`pip3.9 install pecanpy` 
+run node2vec with:   
 `pecanpy --input networkEdgeList.edg --output networkEdgeList.emb --dimension 500`
 
 **processMGIgenes.R**   
