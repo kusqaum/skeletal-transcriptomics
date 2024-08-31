@@ -1,4 +1,3 @@
-# CODE
 
 ## Utility scripts
 
@@ -22,7 +21,7 @@ read in and filter human protein-protein interactions from bioGRID to get ready 
 
 Use PecanPy to run node2vec on edge list created in 07_networkProcessing.R script   
 install PecanPy with:   
-`pip3.9 install pecanpy` 
+`pip3.9 install pecanpy`  
 run node2vec with:   
 `pecanpy --input networkEdgeList.edg --output networkEdgeList.emb --dimension 500`
 
