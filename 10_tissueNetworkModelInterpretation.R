@@ -4,7 +4,12 @@ library(tidyverse)
 library(pheatmap)
 library(cowplot)
 library(ggsci)
+library(correctR)
+#and execute the scripts needed to carry out validation of model on external dataset
+# source("code/processHPOgenes.R") # only problem is biomart package is required for gene map
+# source("code/processMGIgenes.R")
 
+# read in dataused for training the models
 dataForTraining <- readRDS("processed/SVwithNetworkLabelled.rds")
 
 # read in the results of network alone!
@@ -18,6 +23,8 @@ networkOnlyXGBresMortality$AUC
 #0.775
 #gives confidence that network is right
 
+#let's plot the roc for results on held-out test set for predicting both phenotypes
+#skeletal and mortality/aging
 networkOnlyXGBres$aug <- networkOnlyXGBres$aug %>% mutate(Phenotype = "Skeletal")
 networkOnlyXGBresMortality$aug <- networkOnlyXGBresMortality$aug %>%
   mutate(Phenotype = "Mortality/aging")
@@ -45,15 +52,16 @@ ggsave("output/networkAloneROCauc.png", netAlonecurve, height = 12, width = 11)
 ###read in the results of tissue network
 rfNetworkPlusSVnmfFiles <- list.files("processed", full.names = T, pattern = "ResNetworkWithSV_")
 rfNetworkPlusSVnmfResList <- lapply(rfNetworkPlusSVnmfFiles, readRDS)
-
+# put them in order
 rfNetworkPlusSVnmfResList <- rfNetworkPlusSVnmfResList[order(sapply(rfNetworkPlusSVnmfResList, function(x) x$dim))]
+# then get all the Cv metrics
 cvRFNetSV <- lapply(rfNetworkPlusSVnmfResList, function(x){
   x$resDf
 })
-#nonnetwork for comparison
+#READ in the nonnetwork for comparison (created in 04_ script )
 cvNonetwork <- readRDS("processed/cvAllRf_noNetworkRes.rds")
 cvNonetwork <- cvNonetwork %>% mutate(Feature = "gene expression only")
-
+# then plot them together for comparison
 cvNetSv <- do.call("rbind", cvRFNetSV) %>% mutate(model = "RF", Feature = "gene expression with network")
 networkandNoNetwork <- bind_rows(cvNonetwork, cvNetSv)
 networkSVcvBP <- ggplot(networkandNoNetwork, aes(x= as.factor(dim), y = mean, fill=Feature)) +
@@ -70,6 +78,8 @@ networkSVcvBP <- ggplot(networkandNoNetwork, aes(x= as.factor(dim), y = mean, fi
   # ggtitle(expression(atop(italic("Tuning NMF dimension size with RF"))))
 #networkSVcvBP
 
+# read in the other plots (created in 04_ script p1 is rf vs xgb and p2 is pca vs nmf)
+# so can plot them on one page
 p1 <- readRDS("output/p1_RFvsXGB.rds")
 p1 <- p1 +
   #ggtitle(expression(atop(italic(""))))
@@ -103,7 +113,7 @@ maxAucNetDims <- do.call("rbind", cvRfMetrNET_SV) %>%
 #well on the test data:...
 
 
-
+# now get all the results for on the held-out test set so we can plot them too as facetted
 predSVWithNet <- lapply(rfNetworkPlusSVnmfResList, function(x){
   x$aug
 })
@@ -147,6 +157,8 @@ svWnetROCrf <- ggplot(rfSVWithNetpredictionsMetr, aes(x=1-specificity, y=sensiti
 svWnetROCrf
 ggsave("output/SVnetworkROCcurveRF.png", svWnetROCrf, width = 20, height = 12)
 
+# find which dataset the model with the best roc on the held-out test set was 
+# trained on
 
 posBestFitNet <- which.max(dfAUCwNet_text$auc)
 posBestFitNet
@@ -159,22 +171,23 @@ for (n in 1:length(rfNetworkPlusSVnmfResList)){
   }
 }
 dim(bestDfwNet)
-bestFitNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$finalFit
+bestFitNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$finalFit # what are its hyperparams
 bestFitNet
 
+#get the df ready for the corrected repeated kfold cv test
 correctRdfBestDimNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$dfForCorrectR
-
+#get CV metrics
 bestModMetricsNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$resDf
 finalModMetricsNet <- bestModMetricsNet[which.max(bestModMetricsNet$mean),]
 
 
-
+# now for actually interpreting the model's most important features
 
 #lets look at the variable importance
 bestModVarImportNet <- rfNetworkPlusSVnmfResList[[posBestFitNet]]$importanceDf
 rfNetworkPlusSVnmfResList[[posBestFitNet]]$importancePlot
 head(bestModVarImportNet)
-
+# now get the first 4 features that are important to the model
 bestModVarImportNet <- bestModVarImportNet %>% 
   mutate(sign = case_when(Importance<0 ~"negative", TRUE~"positive"))
 head(bestModVarImportNet)
@@ -182,10 +195,11 @@ dim(bestModVarImportNet)
 top4FeatsNet <- bestModVarImportNet[1:4,]
 fourVarsNet <- top4FeatsNet$Variable
 
-
-
+#find these vairables and their weightings of genes in the best dataframe (the one we found before
+#that gave the best AUC on the held-out test set)
 top4FeatsModeldfNet <- bestDfwNet %>% dplyr::select(all_of(fourVarsNet))
 head(top4FeatsModeldfNet)
+# change the column names to something more informative
 colnames(top4FeatsModeldfNet)<- sub("X", "Feature", colnames(top4FeatsModeldfNet))
 head(top4FeatsModeldfNet)
 
@@ -205,7 +219,8 @@ top4FeatsModeldfLabelledNet <- cbind(top4FeatsModeldfNet, labelsAlone)
 # df <- top5FeatsModeldfLabelledNet[order(top5FeatsModeldfLabelledNet$Feature76, decreasing = T),]
 # ggplot(df[1:15,], aes(x=significant, y = Feature76))+
 #   geom_boxplot()
-
+# plot a boxplot of the 4 features looking at if there is much of difference of 
+# weightings between genes that are associated and not associated with a skeletal disease
 for (m in 1:(ncol(top4FeatsModeldfLabelledNet)-1)) {
   #print(m)
   feature <- colnames(top4FeatsModeldfLabelledNet)[m]
@@ -224,10 +239,12 @@ for (m in 1:(ncol(top4FeatsModeldfLabelledNet)-1)) {
   print(n)
   print(p)
 }
+# don't have to include every single plot though
 
 
 
-
+# now get the dataframe ready to plot as a heatmap, rank it by the 
+# model's most important feature
 top4FeatsModeldfNet <- top4FeatsModeldfNet[order(top4FeatsModeldfNet[,1], decreasing = T),]
 hGenesSymbs <- read.table("processed/human_coding_genes.txt", sep = "\t", header = T)
 hGenesSymbs <- hGenesSymbs %>% 
@@ -240,17 +257,18 @@ topFeatsMapped <- merge(top4FeatsModeldfNet, hGenesSymbs, by=0); rownames(topFea
 head(topFeatsMapped)
 topFeatsMapped <- topFeatsMapped[order(topFeatsMapped[,1], decreasing = T),]
 head(topFeatsMapped)
-?rank
+# ?rank
 matN <- as.matrix(topFeatsMapped)
 head(matN)
 nrow <- 15
 matN <- apply(-matN, 2, rank)
+# italicisee gene names!!!
 italicNames <- lapply(
   rownames(matN[1:nrow,]), function(x) bquote(italic(.(x)))
 )
 
 head(matN)
-brewer.pal.info
+# brewer.pal.info
 heatmapN <- pheatmap::pheatmap(matN[1:nrow,], border_color = "white",
                                cluster_rows = F, 
                                cluster_cols = F, 
@@ -267,7 +285,7 @@ heatmapN <- pheatmap::pheatmap(matN[1:nrow,], border_color = "white",
 heatmapN
 ggsave("output/heatmap.png", heatmapN, width = 11, height = 6)
 
-####clusterprofiler code####
+####extract each feature as a dataframe and put in a list to get ready for clusterprofiler####
 
 getEachFeature_fctn <- function(dataframeOfFeats){
   single <- list()
@@ -276,11 +294,11 @@ getEachFeature_fctn <- function(dataframeOfFeats){
     single[[j]] <- data.frame(dataframeOfFeats[,j],
                               row.names = rownames(dataframeOfFeats))
     colnames(single[[j]]) <- colnames(dataframeOfFeats)[j]
-    single[[j]] <- single[[j]][order(single[[j]][,1], decreasing = T),] #%>% arrange(desc(colnames(single[[j]])))
-      
+    #single[[j]] <- single[[j]][order(single[[j]][,1], decreasing = T),] #%>% arrange(desc(colnames(single[[j]])))
+    single[[j]] <- single[[j]] %>% arrange(desc(colnames(single[[j]])))
   }
   return(single)
-} 
+}
 
 eachNetFeat <- getEachFeature_fctn(top4FeatsModeldfNet)
 saveRDS(eachNetFeat, "processed/top4NetFeats.rds")
@@ -291,6 +309,8 @@ saveRDS(eachNetFeat, "processed/top4NetFeats.rds")
 
 
 ############
+####let's use the final model to rank the genes that are not yet labelled (by the IMPC####)
+
 colnamesNet <- paste0("Feature", 1:ncol(bestDfwNet))
 unlabelledGenes <- readRDS("processed/unStudiedGenes.rds")
 head(unlabelledGenes[1:4,1:5])
@@ -425,16 +445,41 @@ head(top20genesWsymbsNet[1:3,1:6])
 top20genesWsymbsNet <- top20genesWsymbsNet[order(top20genesWsymbsNet$.pred_FALSE, decreasing = T),]
 head(top20genesWsymbsNet[16:20,1:5])
 ## can save it if you like...
-write.table(as.data.frame(top20genesWsymbsNet[,1:3]), "processed/temporary.txt", col.names = T, sep = "\t", quote = F)
+write.table(as.data.frame(top20genesWsymbsNet[,1:3]), "processed/top20rankedgenes", col.names = T, sep = "\t", quote = F)
 
 
 mgiHPhen <- read.table("processed/mgiHumanPhenotype.txt", header = T, sep = "\t")
+hpoHPhen <- read.table("processed/hpoHumanPhenotype.txt", header = T, sep = "\t")
 # iwant to find all the rownames of the top 20 that are also in column 1 of mgi
 # s <- which(mgiHPhen[,1] %in% rownames(top20genesWsymbsNet))
 # s
-great <- mgiHPhen[mgiHPhen[,1]%in% rownames(top20genesWsymbsNet),]
-great
+#so looking in the top 50 genes (predicted by the model) will look for overlaps in mgi/hpo db
+top50genes <- orderedGenesNet[1:50,]
+top50genesWsymbsNet <- merge(top50genes, hGenesSymbs, by=0)
+rownames(top50genesWsymbsNet) <- top50genesWsymbsNet$hgnc_symbol; top50genesWsymbsNet$Row.names <-NULL; top50genesWsymbsNet$hgnc_symbol<-NULL
+top50genesWsymbsNet <- top50genesWsymbsNet[order(top50genesWsymbsNet$.pred_TRUE, decreasing = T),]
+
+#first looking in mgi
+overlapMGI <- mgiHPhen[mgiHPhen[,1]%in% rownames(top50genesWsymbsNet),]#there are 3
+overlapMGI$humanMarkerSymbol
+overlapHPO <- hpoHPhen[hpoHPhen[,2] %in% rownames(top50genesWsymbsNet),]#also 3 in hpo
+overlapHPO$geneSymbol
 
 # what is the number of genes overlapping in both databases???????????
 commonHPOMGI <- intersect(rownames(hpOnt), rownames(mgiGenes))
 length(commonHPOMGI)
+
+
+## I want to compare the best model that was trained on the gene expression data
+# with the best from the network data:
+NMFRFResSV_50 <- readRDS("processed/NMFRFResSV_50.rds")
+NMFRFResNetworkWithSV_200 <- readRDS("processed/NMFRFResNetworkWithSV_200.rds")
+
+nmfRFsv50cr <- NMFRFResSV_50$dfForCorrectR %>%
+  mutate(model = "GE")
+nmfRFnet200cr <- NMFRFResNetworkWithSV_200$dfForCorrectR %>%
+  mutate(model = "Net")
+
+compareNMFsvNetDF <- rbind(nmfRFsv50cr, nmfRFnet200cr)
+compareNetWithSV_test<- repkfold_ttest(compareNMFsvNetDF, n1=80, n2=20, k=5, r=3)
+compareNetWithSV_test
