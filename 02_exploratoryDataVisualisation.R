@@ -12,8 +12,9 @@ fullGeneExpress <- readRDS("processed/geneExpressForDimRed.rds")
 mouseHumanWithLabs <- readRDS("processed/mouseHumanWithLabels.rds")
 mouseHumanWithLabs$significant <- as.factor(mouseHumanWithLabs$significant)
 labelsFullDf <- data.frame("significant"=mouseHumanWithLabs$significant, row.names = rownames(mouseHumanWithLabs))
+str(labelsFullDf$significant)
+labelsFullDf$significant <- as.factor(labelsFullDf$significant)
 write.table(labelsFullDf, "processed/labelsFullDf.txt", row.names = T, sep = "\t", quote = F)
-
 #remove rows summing to 0
 fullGeneExpress <- fullGeneExpress[rowSums(fullGeneExpress)>0,] 
 #here there are no 0s but just incase this does happen, remember their rownames
@@ -60,28 +61,15 @@ noofruns <- 2
 #set seed as well
 set.seed(1234)
 
-##generate shuffled data
-# shuffledNMF <- randomize(fullGeneExpressforNMF); row.names(shuffledNMF)<- row.names(fullGeneExpressforNMF)
 print("running NMF")
-# res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
+res.multiRank <- nmf(fullGeneExpressforNMF, rank = ranks, nrun=noofruns, seed = 123456)
 saveRDS(res.multiRank, "processed/res.multiRank.rds")
 
 #look at performance measures of the factorisation
 summary(res.multiRank)
 # consensusmap(res.multiRank, labCol = NA, labRow = 1)
 
-#res.multi.method <- nmf(smallGeneExpress[,1:50], 2, seed =123456, list("brunet","lee", "ns"), .options= "t")
-#compare(res.multi.method)
-
-#maxbrunCoph <- max(res.multi.method$brunet$measures$cophenetic)
-#maxNsCoph <- max(res.multi.method$nsNMF$measures$cophenetic)
-
-#check sumary measures for each method
-#compare(res.multi.method)
-#look at error tracks for each method
-#plot(res.multi.method)
 #plot(res.multiRank)
-
 
 res.multiRank$measures$rank
 
@@ -101,10 +89,12 @@ basis_matrices <- lapply(Wmatrices, function(w){
   data.frame(list(w))
 })
 
+saveRDS(basis_matrices, "processed/unlabelledNMFDfs.rds")
 #here, from NMF reduction result I will get up to only the genes that have labels from each matrix:
 # so that can be used for machine learning:
-
+# labelsFullDf[,1]<- as.factor(labelsFullDf[,1])
 getLabelledGenesFctn <- function(matrixList, knownLabels){
+  knownLabels[,1] <- as.factor(knownLabels[,1])
   merged <- merge(matrixList, knownLabels, by=0);rownames(merged) <- merged$Row.names; merged$Row.names <- NULL
   return(merged)
 }
@@ -127,21 +117,28 @@ dim(pcsLabelled)
 row.names(pcsLabelled) <- pcsLabelled$Row.names; pcsLabelled$Row.names <- NULL
 dim(pcsLabelled)
 
+varexplained <-summary(pca_res)$importance[2,]*100
+ggplot(pcsLabelled, aes(x=PC1, y=PC2))+
+  geom_point(aes(col = significant))+
+  xlab(paste("PC1", round(varexplained[1],1), "%"))+
+  ylab(paste("PC2", round(varexplained[2], 1), "%"))+
+  theme_bw(base_size = 24)
+
 tmp <- t.test(y=as.logical(pcsLabelled$significant), x=pcsLabelled[,518])
 tmp$p.value
 tmp$statistic
 t.test(pcsLabelled$PC2 ~ mouseHumanWithLabs$significant)$p.value
 
 ####do pca on shuffled data and then let's do machine learning
-shuffledPCA<- randomize(fullGeneExpressforPCA); rownames(shuffledPCA)<- rownames(fullGeneExpressforPCA)
-pcaRes_shuffled <- prcomp(shuffledPCA, scale. = T)
-shuffPCs <- pcaRes_shuffled$x
-#just test on dim 50 or 100
-shuffPCsdim50 <- shuffPCs[,1:50]
-#add on labels:
-shuffPCsdim50_L <- merge(shuffPCsdim50, labelsFullDf, by=0)
-rownames(shuffPCsdim50_L)<- shuffPCsdim50_L$Row.names ;shuffPCsdim50_L$Row.names<- NULL
-head(shuffPCsdim50_L)
+# shuffledPCA<- randomize(fullGeneExpressforPCA); rownames(shuffledPCA)<- rownames(fullGeneExpressforPCA)
+# pcaRes_shuffled <- prcomp(shuffledPCA, scale. = T)
+# shuffPCs <- pcaRes_shuffled$x
+# #just test on dim 50 or 100
+# shuffPCsdim50 <- shuffPCs[,1:50]
+# #add on labels:
+# shuffPCsdim50_L <- merge(shuffPCsdim50, labelsFullDf, by=0)
+# rownames(shuffPCsdim50_L)<- shuffPCsdim50_L$Row.names ;shuffPCsdim50_L$Row.names<- NULL
+# head(shuffPCsdim50_L)
 
 #split and create rec- this was just temporary so I need to run it in full in the model training where 
 #the functions for machine learning are
@@ -191,15 +188,15 @@ for (i in 1:length(ranks)) {
 }
 
 #do some more in depth tuning
-for (j in 1:length(tuneRanks)) {
-  #create empty lists
-  pcList_tuned <- list()
-  #loop through each of the dimensions
-  for (m in (tuneRanks)) {
-    dime2<- pcsLabelled[,1:m]
-    pcList_tuned<- append(pcList_tuned, list(dime2))
-  }
-}
+# for (j in 1:length(tuneRanks)) {
+#   #create empty lists
+#   pcList_tuned <- list()
+#   #loop through each of the dimensions
+#   for (m in (tuneRanks)) {
+#     dime2<- pcsLabelled[,1:m]
+#     pcList_tuned<- append(pcList_tuned, list(dime2))
+#   }
+# }
 # pcList is also for PCA machine learning-
 
 ##
@@ -370,8 +367,8 @@ allDimensionReduction <- rbind(NMFfeaturesMinP, pvalsPcaDf)
 ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), size=Algorithm, col=Algorithm, shape=Algorithm)) +
   geom_point() +
   theme_bw(base_size = 20)+
-  xlab("k dimensions") +ylab("-log10 P-Value")+
-  scale_colour_manual(values = c("mediumpurple", "tan2"))+
+  xlab("k dimensions") +ylab(expression("-log"[10]* "(adj " *italic(P)* "-value)"))+
+  scale_colour_manual(values = c("#91D1C2B2", "#E64B35B2"))+
   scale_size_manual(values = c(7, 5))
   # scale_x_continuous(breaks = seq(2,50, 2))
 
@@ -380,33 +377,28 @@ ggplot(allDimensionReduction, aes(x = Dimension, y=-log10(pVals), size=Algorithm
 
 
 labelledGenesPCARes <- lapply(pcList, FUN = getLabelledGenesFctn, labelsFullDf)
-labelledGenesPCARes_tuned <- lapply(pcList_tuned,  FUN = getLabelledGenesFctn, labelsFullDf)
 # labelledGenesNMFRes
 
 # read.table("pro") - need to read in the new labels
 # differentlyLabelledPCA <- map(.x = pcList, .f = getLabelledGenesFctn, newImpcGenes)
 
 
-#saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
-#saveRDS(labelledGenesPCARes_tuned, "processed/pcaDataframes_tuned.rds")
+saveRDS(labelledGenesPCARes, "processed/pcaDataframes.rds")
 saveRDS(labelledGenesNMFRes, "processed/nmfDataframes.rds")
 
 ##save result for model training
 # saveRDS(basis_matrices, "processed/nmf_wMatrices.rds")
-# saveRDS(smallGeneExpress2, "processed/geneExpression.rds")
-# saveRDS(smallGeneExpress2, "processed/tempGeneExpress.rds")
 
 
-
-####i want to get all the unlabelled genes####
+####i want to get all the unlabelled genes so can use the model to rank them later####
 fullGeneExpressN <- as.data.frame(fullGeneExpressN)
 noLabels <- row.names(fullGeneExpressN)[!row.names(fullGeneExpressN) %in%
                                           row.names(mouseHumanWithLabs)]
 unlabelled <- fullGeneExpressN[noLabels,]
-saveRDS(unlabelled, "processed/unlabelledGenes.rds")
+saveRDS(unlabelled, "processed/unStudiedGenes.rds")
 
-pc500 <- pcsLabelled[,1:500]
-pc500_Labelled <- merge(pc500, labelsFullDf, by=0);pc500_Labelled$Row.names<-NULL
+#pc500 <- pcsLabelled[,1:500]
+#pc500_Labelled <- merge(pc500, labelsFullDf, by=0);pc500_Labelled$Row.names<-NULL
 # if you are going to call in the functions either do it in the script where the functions are or write out 
 #the functions above
 # split_pc500 <- split_processingData_fctn(pc500_Labelled, 0.8)
