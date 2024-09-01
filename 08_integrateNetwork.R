@@ -50,7 +50,7 @@ head(networkData[,488:500])
 #now need to merge with gene exp
 networkData <- mutate_all(networkData, function(x) as.numeric(as.character(x)))
 str(networkData$D1)
-networkDataLabelled <- merge(networkData, labelsFullDf, by=0); rownames(networkDataLabelled) <- networkDataLabelled$Row.names; networkDataLabelled$Row.names <- NULL
+networkDataLabelled <- merge(networkData, labelsForNet, by=0); rownames(networkDataLabelled) <- networkDataLabelled$Row.names; networkDataLabelled$Row.names <- NULL
 saveRDS(networkData, "processed/processedNetworkEmb.rds")
 saveRDS(networkDataLabelled, "processed/processedNetworkEmbLabelled.rds")
 
