@@ -3,13 +3,17 @@
 
 ## Overview
 
-RNA-Seq, machine learning, skeletal diseases
+It is important to identify yet unstudied skeletal disease-associated genes to aid in the discovery of potential therapeutic targets.   
+This study aimed to train random forest and gradient boosted trees to prioritise skeletal disease-associated genes using binary mouse gene-to-phenotype associations.
 
 ## Installation
 
-install necessary R packages from the `install` directory.
-
+install necessary R packages by running:   
+ `Rscript install/install.R`
 ## Directions
+
+**phenotype_labels.R**   
+read in IMPC labels and obtain binary labels for machine learning models
 
 **01_geneExpression.R**   
 processing of skeletal tissue-specific gene expression data
@@ -40,5 +44,4 @@ train random forest and gradient boosted trees on network
 
 **10_tissueNetworkModelInterpretation.R**  
 identify final model's most important features from tissue-specific network 
-
 
