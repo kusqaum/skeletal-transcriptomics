@@ -1,5 +1,6 @@
 # Supervised machine learning to prioritise skeletal disease-associated genes using transcriptomics data
 
+![image](https://github.com/user-attachments/assets/21a216a8-9b57-4235-a416-ef5fb213609d)
 
 ## Overview
 
